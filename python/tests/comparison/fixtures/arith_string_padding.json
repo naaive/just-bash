@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "for n in 7 42 1234; do\n  printf '%05d\\n' \"$n\"\ndone",
+  "stderr": "",
+  "stdout": "00007\n00042\n01234\n"
+}

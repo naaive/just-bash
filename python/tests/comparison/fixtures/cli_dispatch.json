@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "case \"${1:-help}\" in\n  help) echo \"usage: cli CMD\" ;;\n  build) echo \"build\" ;;\n  *) echo \"unknown\" >&2; exit 2 ;;\nesac",
+  "stderr": "",
+  "stdout": "usage: cli CMD\n"
+}

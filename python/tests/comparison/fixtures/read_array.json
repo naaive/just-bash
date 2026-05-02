@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "read -a parts <<< \"alpha beta gamma\"; echo \"${parts[1]}\"",
+  "stderr": "",
+  "stdout": "beta\n"
+}

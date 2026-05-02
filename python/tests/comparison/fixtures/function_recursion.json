@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "fact() {\n  if (( $1 <= 1 )); then\n    echo 1\n  else\n    local sub=$(fact $(( $1 - 1 )))\n    echo $(( $1 * sub ))\n  fi\n}\nfact 5",
+  "stderr": "",
+  "stdout": "120\n"
+}

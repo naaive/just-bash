@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "set -- -a -b val rest\nwhile getopts \"ab:c\" opt; do\n  case $opt in\n    a) echo \"got -a\";;\n    b) echo \"got -b $OPTARG\";;\n    c) echo \"got -c\";;\n  esac\ndone\nshift $((OPTIND - 1))\necho \"remaining: $@\"",
+  "stderr": "",
+  "stdout": "got -a\ngot -b val\nremaining: rest\n"
+}

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "a=1; b=0\necho $(( a && b ))\necho $(( a || b ))\necho $(( !a ))\necho $(( !b ))",
+  "stderr": "",
+  "stdout": "0\n1\n0\n1\n"
+}

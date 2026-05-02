@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "for ip in 192.168.1.1 999.0.0.1 not-an-ip; do\n  if [[ \"$ip\" =~ ^[0-9.]+$ ]]; then\n    echo \"$ip: numeric\"\n  else\n    echo \"$ip: no\"\n  fi\ndone",
+  "stderr": "",
+  "stdout": "192.168.1.1: numeric\n999.0.0.1: numeric\nnot-an-ip: no\n"
+}

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "echo {01..05}",
+  "stderr": "",
+  "stdout": "01 02 03 04 05\n"
+}

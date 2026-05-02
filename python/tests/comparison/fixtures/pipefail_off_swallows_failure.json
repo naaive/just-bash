@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "false | true\necho \"rc=$?\"",
+  "stderr": "",
+  "stdout": "rc=0\n"
+}

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "set -- -bvalue rest\nwhile getopts \"ab:c\" opt; do\n  echo \"$opt=$OPTARG\"\ndone\nshift $((OPTIND - 1))\necho \"rest: $*\"",
+  "stderr": "",
+  "stdout": "b=value\nrest: rest\n"
+}

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "for w in $(echo a b c); do echo \"[$w]\"; done",
+  "stderr": "",
+  "stdout": "[a]\n[b]\n[c]\n"
+}

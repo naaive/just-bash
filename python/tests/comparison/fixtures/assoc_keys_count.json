@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "declare -A h\nh[red]=#f00\nh[green]=#0f0\nh[blue]=#00f\necho \"${#h[@]}\"",
+  "stderr": "",
+  "stdout": "3\n"
+}

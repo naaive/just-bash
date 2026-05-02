@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "set -o pipefail\nfalse | true\necho \"on=$?\"\nset +o pipefail\nfalse | true\necho \"off=$?\"",
+  "stderr": "",
+  "stdout": "on=1\noff=0\n"
+}

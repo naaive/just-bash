@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "if nproc | grep -qE '^[0-9]+$'; then echo ok; else echo bad; fi",
+  "stderr": "",
+  "stdout": "ok\n"
+}

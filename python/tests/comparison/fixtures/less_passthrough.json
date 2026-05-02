@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf \"abc\\n\" | less",
+  "stderr": "",
+  "stdout": "abc\n"
+}

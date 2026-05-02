@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "set -- -v -n 5 -o /tmp/out arg1\nverbose=0; count=0; out=\nOPTIND=1\nwhile getopts \":vn:o:\" opt; do\n  case \"$opt\" in\n    v) verbose=$((verbose + 1)) ;;\n    n) count=$OPTARG ;;\n    o) out=$OPTARG ;;\n  esac\ndone\nshift $((OPTIND - 1))\necho \"verbose=$verbose count=$count out=$out rest=$*\"",
+  "stderr": "",
+  "stdout": "verbose=1 count=5 out=/tmp/out rest=arg1\n"
+}

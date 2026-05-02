@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf \"1\\n2\\n3\\n4\\n\" | { mapfile -t -n 2 arr; echo \"${#arr[@]}\"; }",
+  "stderr": "",
+  "stdout": "2\n"
+}

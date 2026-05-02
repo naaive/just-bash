@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "unset undef\necho \"${undef:-fallback}\"\necho \"${undef:=assigned}\"\necho \"$undef\"\necho \"${set:-shouldnt-show}\"",
+  "stderr": "",
+  "stdout": "fallback\nassigned\nassigned\nshouldnt-show\n"
+}

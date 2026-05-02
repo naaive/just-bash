@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "mem_mb=8192\nsecs=12345\nmem=$(( mem_mb / 1024 ))\nh=$(( secs / 3600 ))\nm=$(( (secs % 3600) / 60 ))\nprintf 'mem=%dGiB up=%dh%dm\\n' \"$mem\" \"$h\" \"$m\"",
+  "stderr": "",
+  "stdout": "mem=8GiB up=3h25m\n"
+}

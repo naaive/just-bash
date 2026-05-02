@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "path=/a/b/c/file.tar.gz\necho \"${path##*/}\"\necho \"${path%.*}\"\necho \"${path%%.*}\"\necho \"${path#*/}\"",
+  "stderr": "",
+  "stdout": "file.tar.gz\n/a/b/c/file.tar\n/a/b/c/file\na/b/c/file.tar.gz\n"
+}

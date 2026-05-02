@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "target=hello\ndeclare -n ref=target\necho \"$ref\"\nref=updated\necho \"$target\"",
+  "stderr": "",
+  "stdout": "hello\nupdated\n"
+}

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "n=5\ncat <<EOF\nresult is $((n * 2))\nEOF",
+  "stderr": "",
+  "stdout": "result is 10\n"
+}

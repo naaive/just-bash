@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "{ echo a; echo b; echo c; } | while read line; do echo \"got: $line\"; done",
+  "stderr": "",
+  "stdout": "got: a\ngot: b\ngot: c\n"
+}

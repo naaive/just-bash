@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf 'a\\nneedle\\nb\\nc\\nd\\n' | grep -A1 needle",
+  "stderr": "",
+  "stdout": "needle\nb\n"
+}

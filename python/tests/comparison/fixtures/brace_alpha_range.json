@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "echo {a..g}",
+  "stderr": "",
+  "stdout": "a b c d e f g\n"
+}

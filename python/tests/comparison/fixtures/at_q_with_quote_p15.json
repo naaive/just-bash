@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "x=\"don't\"; echo \"${x@Q}\" ",
+  "stderr": "",
+  "stdout": "'don'\\''t'\n"
+}

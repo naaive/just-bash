@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "x=\"hello world\"\necho \"${x@U}\"\necho \"${x@L}\"\necho \"${x@u}\"",
+  "stderr": "",
+  "stdout": "HELLO WORLD\nhello world\nHello world\n"
+}

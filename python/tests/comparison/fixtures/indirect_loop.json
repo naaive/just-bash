@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "foo_a=alpha\nfoo_b=beta\nfor n in foo_a foo_b; do\n  echo \"$n=${!n}\"\ndone",
+  "stderr": "",
+  "stdout": "foo_a=alpha\nfoo_b=beta\n"
+}

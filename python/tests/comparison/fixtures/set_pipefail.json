@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "false | true; echo $?",
+  "stderr": "",
+  "stdout": "0\n"
+}

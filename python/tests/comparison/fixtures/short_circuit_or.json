@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "true || echo nope\nfalse || echo fallback",
+  "stderr": "",
+  "stdout": "fallback\n"
+}

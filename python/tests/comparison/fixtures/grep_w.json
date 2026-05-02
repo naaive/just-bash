@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf \"%s\\n\" cat catalog scatter cat | grep -w cat",
+  "stderr": "",
+  "stdout": "cat\ncat\n"
+}

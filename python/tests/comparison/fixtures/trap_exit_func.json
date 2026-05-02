@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "cleanup() { echo \"cleaned\"; }\ntrap cleanup EXIT\necho \"main\"",
+  "stderr": "",
+  "stdout": "main\ncleaned\n"
+}

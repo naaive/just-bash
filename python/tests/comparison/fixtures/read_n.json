@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "read -n 3 var <<< \"abcdef\"; echo \"[$var]\"",
+  "stderr": "",
+  "stdout": "[abc]\n"
+}

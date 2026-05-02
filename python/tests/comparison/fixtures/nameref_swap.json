@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "a=alpha\nb=beta\nswap() {\n  local -n x=$1\n  local -n y=$2\n  local tmp=$x\n  x=$y\n  y=$tmp\n}\nswap a b\necho \"a=$a\"\necho \"b=$b\"",
+  "stderr": "",
+  "stdout": "a=beta\nb=alpha\n"
+}

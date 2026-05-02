@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf 'a\\nb\\nc\\n' > /tmp/lines\nwhile IFS= read -r line; do\n  echo \"got: $line\"\ndone < /tmp/lines",
+  "stderr": "",
+  "stdout": "got: a\ngot: b\ngot: c\n"
+}

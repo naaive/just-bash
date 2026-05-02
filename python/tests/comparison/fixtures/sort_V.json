@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf 'v1.2\\nv1.10\\nv1.3\\n' | sort -V",
+  "stderr": "",
+  "stdout": "v1.2\nv1.3\nv1.10\n"
+}

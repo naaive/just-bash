@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "s=hello; echo \"${s//l/L}\"",
+  "stderr": "",
+  "stdout": "heLLo\n"
+}

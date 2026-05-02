@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "for v in 5 a Z ' ' '!' .; do\n  case \"$v\" in\n    [[:digit:]]) echo \"$v -> digit\" ;;\n    [[:alpha:]]) echo \"$v -> alpha\" ;;\n    [[:space:]]) echo \"$v -> space\" ;;\n    [[:punct:]]) echo \"$v -> punct\" ;;\n    *) echo \"$v -> other\" ;;\n  esac\ndone",
+  "stderr": "",
+  "stdout": "5 -> digit\na -> alpha\nZ -> alpha\n  -> space\n! -> punct\n. -> punct\n"
+}

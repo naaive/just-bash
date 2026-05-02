@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf '[s]\\nhost=h\\nport=8\\n' > /tmp/c.ini\ndeclare -A s\nsection=\"\"\nwhile IFS= read -r line; do\n  case \"$line\" in\n    \\[*\\])\n      section=${line#[}\n      section=${section%]}\n      ;;\n    *=*)\n      k=${line%%=*}\n      v=${line#*=}\n      [[ \"$section\" == \"s\" ]] && s[$k]=$v\n      ;;\n  esac\ndone < /tmp/c.ini\necho \"${s[host]}:${s[port]}\"",
+  "stderr": "",
+  "stdout": "h:8\n"
+}

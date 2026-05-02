@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": ": > /tmp/log; echo first >> /tmp/log; echo second >> /tmp/log; cat /tmp/log",
+  "stderr": "",
+  "stdout": "first\nsecond\n"
+}

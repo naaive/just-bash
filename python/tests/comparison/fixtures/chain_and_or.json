@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "t() { return \"$1\"; }\nt 0 && echo a || echo b\nt 1 && echo c || echo d",
+  "stderr": "",
+  "stdout": "a\nd\n"
+}

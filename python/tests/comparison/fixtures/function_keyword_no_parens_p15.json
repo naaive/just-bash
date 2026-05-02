@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "function greet {\n  echo \"hi $1\"\n}\ngreet alice",
+  "stderr": "",
+  "stdout": "hi alice\n"
+}

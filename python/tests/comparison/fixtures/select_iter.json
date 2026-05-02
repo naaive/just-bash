@@ -1,0 +1,7 @@
+{
+  "exitCode": 1,
+  "files": {},
+  "script": "select x in red green blue; do echo \"$x\"; done",
+  "stderr": "1) red\n2) green\n3) blue\n#? ",
+  "stdout": "\n"
+}

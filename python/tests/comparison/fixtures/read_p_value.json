@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "read -p \"name? \" name <<< \"alice\"; echo \"$name\"",
+  "stderr": "",
+  "stdout": "alice\n"
+}

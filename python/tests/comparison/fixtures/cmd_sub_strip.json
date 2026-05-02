@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "x=$(printf \"abc\\n\\n\\n\"); echo \"[$x]\"",
+  "stderr": "",
+  "stdout": "[abc]\n"
+}

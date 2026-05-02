@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "declare -A counts\nitems=(red blue red green blue red green green green)\nfor item in \"${items[@]}\"; do\n  counts[$item]=$(( ${counts[$item]:-0} + 1 ))\ndone\nfor k in green red blue; do\n  echo \"$k: ${counts[$k]}\"\ndone",
+  "stderr": "",
+  "stdout": "green: 4\nred: 3\nblue: 2\n"
+}

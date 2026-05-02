@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "awk 'BEGIN { n = split(\"a,b,c,d\", arr, \",\"); print n, arr[1], arr[4] }'",
+  "stderr": "",
+  "stdout": "4 a d\n"
+}

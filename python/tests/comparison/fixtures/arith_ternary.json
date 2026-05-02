@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "x=10; echo $(( x > 5 ? 100 : 200 ))",
+  "stderr": "",
+  "stdout": "100\n"
+}

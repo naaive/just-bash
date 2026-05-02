@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "join_args() {\n  local IFS=,\n  echo \"$*\"\n}\njoin_args alpha beta gamma",
+  "stderr": "",
+  "stdout": "alpha,beta,gamma\n"
+}

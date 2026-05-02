@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "a=10; b=2\n[[ \"$a\" -gt \"$b\" ]] && echo \"a > b numeric\"\n[[ \"$a\" > \"$b\" ]] || echo \"a not > b lex\"",
+  "stderr": "",
+  "stdout": "a > b numeric\na not > b lex\n"
+}

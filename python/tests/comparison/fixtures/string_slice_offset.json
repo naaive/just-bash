@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "s=\"Hello, World!\"\necho \"${s:7}\"\necho \"${s:7:5}\"\necho \"${s:0:5}\"",
+  "stderr": "",
+  "stdout": "World!\nWorld\nHello\n"
+}

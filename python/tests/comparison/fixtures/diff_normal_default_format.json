@@ -1,0 +1,7 @@
+{
+  "exitCode": 1,
+  "files": {},
+  "script": "printf 'a\\nb\\nc\\n' > /tmp/d1\nprintf 'a\\nx\\nc\\n' > /tmp/d2\ndiff /tmp/d1 /tmp/d2",
+  "stderr": "",
+  "stdout": "2c2\n< b\n---\n> x\n"
+}

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf '%q\\n' hello",
+  "stderr": "",
+  "stdout": "hello\n"
+}

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "awk 'function fact(n) { if (n <= 1) return 1; return n * fact(n - 1) } BEGIN { print fact(6) }'",
+  "stderr": "",
+  "stdout": "720\n"
+}

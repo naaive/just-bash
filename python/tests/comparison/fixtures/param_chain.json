@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "a=hello; b=${a:-fallback}; echo \"[$b]\"; unset a; c=${a:-fallback}; echo \"[$c]\"",
+  "stderr": "",
+  "stdout": "[hello]\n[fallback]\n"
+}

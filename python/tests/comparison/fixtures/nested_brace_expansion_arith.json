@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "total=0\nfor n in {1..5}; do\n  total=$((total + n))\ndone\necho \"$total\"",
+  "stderr": "",
+  "stdout": "15\n"
+}

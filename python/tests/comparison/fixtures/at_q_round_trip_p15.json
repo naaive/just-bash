@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "for original in \"alpha\" \"beta gamma\" \"with ; punct\"; do\n  q=${original@Q}\n  eval \"echoed=$q\"\n  [[ \"$echoed\" == \"$original\" ]] && echo \"ok: [$original] -> $q\"\ndone",
+  "stderr": "",
+  "stdout": "ok: [alpha] -> 'alpha'\nok: [beta gamma] -> 'beta gamma'\nok: [with ; punct] -> 'with ; punct'\n"
+}

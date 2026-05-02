@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf 'abc 12 def 345\\nno digits\\n6789 z\\n' | grep -oE '[0-9]+'",
+  "stderr": "",
+  "stdout": "12\n345\n6789\n"
+}

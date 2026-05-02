@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "mkdir -p /tmp/q; : > /tmp/q/a.py; : > /tmp/q/b.md; : > /tmp/q/c.txt; find /tmp/q \\( -name '*.py' -o -name '*.md' \\) | sort",
+  "stderr": "",
+  "stdout": "/tmp/q/a.py\n/tmp/q/b.md\n"
+}

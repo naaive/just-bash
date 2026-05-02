@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "s=foofoo; echo \"${s/#foo/BAR}\"",
+  "stderr": "",
+  "stdout": "BARfoo\n"
+}

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "emit() {\n  cat <<EOF\n[$1]\nkey=value\nnested=${2:-default}\nEOF\n}\nemit alpha\nemit beta override",
+  "stderr": "",
+  "stdout": "[alpha]\nkey=value\nnested=default\n[beta]\nkey=value\nnested=override\n"
+}

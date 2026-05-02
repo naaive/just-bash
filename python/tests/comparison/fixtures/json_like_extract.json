@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "blob='{\"name\":\"alice\",\"age\":30}'\ninner=${blob#\\{}\ninner=${inner%\\}}\nIFS=',' read -ra pairs <<< \"$inner\"\nfor p in \"${pairs[@]}\"; do\n  k=${p%%:*}\n  v=${p#*:}\n  k=${k//\\\"/}\n  v=${v//\\\"/}\n  printf '%s -> %s\\n' \"$k\" \"$v\"\ndone",
+  "stderr": "",
+  "stdout": "name -> alice\nage -> 30\n"
+}

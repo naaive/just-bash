@@ -1,0 +1,7 @@
+{
+  "exitCode": 1,
+  "files": {},
+  "script": "diff <(printf 'a\\nb\\nc\\n') <(printf 'a\\nx\\nc\\n')",
+  "stderr": "",
+  "stdout": "2c2\n< b\n---\n> x\n"
+}

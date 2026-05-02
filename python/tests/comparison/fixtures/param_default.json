@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "unset x; echo \"${x:-fallback}\"",
+  "stderr": "",
+  "stdout": "fallback\n"
+}

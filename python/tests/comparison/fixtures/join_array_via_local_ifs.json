@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "arr=(a b c d)\njoined=$(IFS=,; echo \"${arr[*]}\")\necho \"$joined\"",
+  "stderr": "",
+  "stdout": "a,b,c,d\n"
+}

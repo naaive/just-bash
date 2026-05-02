@@ -1,0 +1,7 @@
+{
+  "exitCode": 5,
+  "files": {},
+  "script": "trap 'echo cleanup' EXIT; echo work; exit 5",
+  "stderr": "",
+  "stdout": "work\ncleanup\n"
+}

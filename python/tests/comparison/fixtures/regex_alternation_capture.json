@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "for s in apple banana cherry; do\n  if [[ \"$s\" =~ ^(apple|cherry)$ ]]; then\n    echo \"$s: hit (${BASH_REMATCH[1]})\"\n  else\n    echo \"$s: miss\"\n  fi\ndone",
+  "stderr": "",
+  "stdout": "apple: hit (apple)\nbanana: miss\ncherry: hit (cherry)\n"
+}

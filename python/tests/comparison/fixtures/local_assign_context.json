@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "f() {\n  local x=$1\n  echo \"[$x]\"\n}\nf \"hello world\"",
+  "stderr": "",
+  "stdout": "[hello world]\n"
+}

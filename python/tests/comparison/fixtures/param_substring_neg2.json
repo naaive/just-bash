@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "s=hello; echo \"${s: -2}\"",
+  "stderr": "",
+  "stdout": "lo\n"
+}

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf 'b,2\\na,1\\nc,3\\n' | sort -t, -k1",
+  "stderr": "",
+  "stdout": "a,1\nb,2\nc,3\n"
+}

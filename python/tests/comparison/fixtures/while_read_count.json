@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf 'x\\ny\\nz\\nw\\n' > /tmp/n\nn=0\nwhile read -r _; do\n  n=$((n + 1))\ndone < /tmp/n\necho \"$n\"",
+  "stderr": "",
+  "stdout": "4\n"
+}

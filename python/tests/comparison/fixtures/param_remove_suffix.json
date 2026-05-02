@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "x=foo.bar.baz; echo \"${x%.*}\"; echo \"${x%%.*}\"",
+  "stderr": "",
+  "stdout": "foo.bar\nfoo\n"
+}

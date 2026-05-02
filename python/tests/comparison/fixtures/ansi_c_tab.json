@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "echo $'col1\\tcol2'",
+  "stderr": "",
+  "stdout": "col1\tcol2\n"
+}

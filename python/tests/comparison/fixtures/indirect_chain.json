@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "a=hello; b=a; c=b; echo \"${!c}\"; echo \"${!b}\"",
+  "stderr": "",
+  "stdout": "a\nhello\n"
+}

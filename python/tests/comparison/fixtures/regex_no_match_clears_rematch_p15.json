@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "[[ \"abc\" =~ ^x([0-9]+)y$ ]]\necho \"rc=$?\"\necho \"len=${#BASH_REMATCH[@]}\"",
+  "stderr": "",
+  "stdout": "rc=1\nlen=0\n"
+}

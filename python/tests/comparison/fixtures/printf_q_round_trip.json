@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "original=\"hello world's\"\nquoted=$(printf '%q' \"$original\")\neval \"echoed=$quoted\"\n[[ \"$echoed\" == \"$original\" ]] && echo ok || echo bad",
+  "stderr": "",
+  "stdout": "ok\n"
+}

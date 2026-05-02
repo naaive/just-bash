@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf 'hi' > /tmp/x; truncate -s 5 /tmp/x; wc -c < /tmp/x",
+  "stderr": "",
+  "stdout": "5\n"
+}

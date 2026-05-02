@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "text=\"alpha beta alpha gamma alpha beta\"\necho \"$text\" | tr ' ' '\\n' | sort | uniq -c | sort -rn",
+  "stderr": "",
+  "stdout": "      3 alpha\n      2 beta\n      1 gamma\n"
+}

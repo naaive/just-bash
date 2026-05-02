@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "echo $'a\\nb'",
+  "stderr": "",
+  "stdout": "a\nb\n"
+}

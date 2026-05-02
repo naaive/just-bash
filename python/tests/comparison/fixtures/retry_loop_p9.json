@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "attempts=0\nstatus=fail\nsim() {\n  if (( $1 >= 3 )); then return 0; fi\n  return 1\n}\nwhile (( attempts < 3 )); do\n  ((attempts++))\n  if sim \"$attempts\"; then status=ok; break; fi\ndone\necho \"$status:$attempts\"",
+  "stderr": "",
+  "stdout": "ok:3\n"
+}

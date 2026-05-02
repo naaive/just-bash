@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "mkdir -p /tmp/walk/sub\necho a > /tmp/walk/x\necho b > /tmp/walk/sub/y\nfind /tmp/walk -type f | sort",
+  "stderr": "",
+  "stdout": "/tmp/walk/sub/y\n/tmp/walk/x\n"
+}

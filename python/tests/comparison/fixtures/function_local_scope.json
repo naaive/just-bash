@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "v=top\nf() {\n  local v=local\n  echo \"f: $v\"\n}\nf\necho \"after: $v\"",
+  "stderr": "",
+  "stdout": "f: local\nafter: top\n"
+}

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "echo $((0xff ^ 0x0f))",
+  "stderr": "",
+  "stdout": "240\n"
+}

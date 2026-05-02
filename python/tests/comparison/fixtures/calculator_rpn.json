@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "stack=()\ntop=-1\nRET=0\npush() {\n  top=$((top + 1))\n  stack[$top]=$1\n}\npop() {\n  RET=${stack[$top]}\n  unset 'stack[top]'\n  top=$((top - 1))\n}\napply() {\n  local op=$1\n  pop\n  local b=$RET\n  pop\n  local a=$RET\n  case \"$op\" in\n    +) push $((a + b)) ;;\n    -) push $((a - b)) ;;\n  esac\n}\npush 10\npush 5\napply +\npush 3\napply -\necho \"${stack[$top]}\"",
+  "stderr": "",
+  "stdout": "12\n"
+}

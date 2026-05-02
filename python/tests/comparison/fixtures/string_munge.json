@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "s=\"The Quick Brown FOX\"\necho \"${s,,}\"\necho \"${s^^}\"\necho \"${s/Quick/Slow}\"\necho \"${s// /-}\"\necho \"${#s}\"",
+  "stderr": "",
+  "stdout": "the quick brown fox\nTHE QUICK BROWN FOX\nThe Slow Brown FOX\nThe-Quick-Brown-FOX\n19\n"
+}

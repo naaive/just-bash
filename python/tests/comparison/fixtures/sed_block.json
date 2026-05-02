@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf 'a\\nb\\nc\\n' | sed '2,3{s/.*/X/}'",
+  "stderr": "",
+  "stdout": "a\nX\nX\n"
+}

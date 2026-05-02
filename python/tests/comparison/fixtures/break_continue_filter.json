@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "result=()\nfor i in 1 2 3 4 5 6 7 8 9 10; do\n  if (( i % 2 == 0 )); then\n    continue\n  fi\n  if (( i > 7 )); then\n    break\n  fi\n  result+=(\"$i\")\ndone\necho \"${result[*]}\"",
+  "stderr": "",
+  "stdout": "1 3 5 7\n"
+}

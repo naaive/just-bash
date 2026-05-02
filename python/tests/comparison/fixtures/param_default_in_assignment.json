@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "unset x\ny=${x:-fallback}\necho \"$y\"\nx=set\ny=${x:-fallback}\necho \"$y\"",
+  "stderr": "",
+  "stdout": "fallback\nset\n"
+}

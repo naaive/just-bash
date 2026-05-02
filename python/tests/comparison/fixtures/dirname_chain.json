@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "p=/usr/local/bin/script.sh\ndirname \"$p\"\ndirname \"$(dirname \"$p\")\"",
+  "stderr": "",
+  "stdout": "/usr/local/bin\n/usr/local\n"
+}

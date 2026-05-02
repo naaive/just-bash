@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "names=(alpha beta gamma)\ncounts=(7 23 199)\nprintf '%-8s %5s\\n' name count\nfor i in \"${!names[@]}\"; do\n  printf '%-8s %5d\\n' \"${names[$i]}\" \"${counts[$i]}\"\ndone",
+  "stderr": "",
+  "stdout": "name     count\nalpha        7\nbeta        23\ngamma      199\n"
+}

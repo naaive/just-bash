@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "echo \"hello   world  done\" | tr -s \" \"",
+  "stderr": "",
+  "stdout": "hello world done\n"
+}

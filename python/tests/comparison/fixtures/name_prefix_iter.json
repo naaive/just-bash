@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "foo_a=1; foo_b=2; bar=3; for n in \"${!foo_@}\"; do echo \"$n=${!n}\"; done | sort",
+  "stderr": "",
+  "stdout": "foo_a=1\nfoo_b=2\n"
+}

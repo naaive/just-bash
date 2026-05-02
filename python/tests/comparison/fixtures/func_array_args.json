@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "report() {\n  local count=$#\n  echo \"got $count: $*\"\n  for a in \"$@\"; do\n    echo \"- $a\"\n  done\n}\nreport alpha \"hello world\" gamma",
+  "stderr": "",
+  "stdout": "got 3: alpha hello world gamma\n- alpha\n- hello world\n- gamma\n"
+}

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf 'INFO a\\nERROR b\\nINFO c\\nWARN d\\nERROR e\\n' \\\n  | grep -c '^ERROR'",
+  "stderr": "",
+  "stdout": "2\n"
+}

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "sum() {\n  local n=$1\n  if (( n <= 0 )); then\n    echo 0\n    return\n  fi\n  local sub=$(sum $((n - 1)))\n  echo $((n + sub))\n}\nsum 5",
+  "stderr": "",
+  "stdout": "15\n"
+}

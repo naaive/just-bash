@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "if [[ \"version=1.2.3\" =~ version=([0-9]+)\\.([0-9]+)\\.([0-9]+) ]]; then\n  echo \"${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}\"\n  echo \"full=${BASH_REMATCH[0]}\"\nfi",
+  "stderr": "",
+  "stdout": "1.2.3\nfull=version=1.2.3\n"
+}

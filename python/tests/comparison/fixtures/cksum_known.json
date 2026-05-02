@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf 'hello\\n' | cksum",
+  "stderr": "",
+  "stdout": "3015617425 6\n"
+}

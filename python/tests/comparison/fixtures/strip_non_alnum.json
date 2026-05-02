@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "for s in \"hello-world\" \"abc123\" \"a b c\"; do\n  out=${s//[^[:alnum:]]/}\n  echo \"[$out]\"\ndone",
+  "stderr": "",
+  "stdout": "[helloworld]\n[abc123]\n[abc]\n"
+}

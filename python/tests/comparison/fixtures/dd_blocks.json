@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf \"abcdefghij\" | dd bs=2 count=3 2>/dev/null",
+  "stderr": "",
+  "stdout": "abcdef"
+}

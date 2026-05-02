@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "arr=(a b c d e); echo ${#arr[@]}",
+  "stderr": "",
+  "stdout": "5\n"
+}

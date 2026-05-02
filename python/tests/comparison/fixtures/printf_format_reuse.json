@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf '%-6s %3d\\n' alpha 1 beta 22 gamma 333",
+  "stderr": "",
+  "stdout": "alpha    1\nbeta    22\ngamma  333\n"
+}

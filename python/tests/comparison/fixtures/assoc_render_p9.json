@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "declare -A vars\nvars[name]=alice\ntemplate='hi ${name}'\nrender() {\n  local out=$1\n  for k in \"${!vars[@]}\"; do\n    out=$(echo \"$out\" | sed \"s|\\${$k}|${vars[$k]}|g\")\n  done\n  printf '%s\\n' \"$out\"\n}\nrender \"$template\"",
+  "stderr": "",
+  "stdout": "hi alice\n"
+}

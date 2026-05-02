@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "awk 'BEGIN { for (i = 0; i < 5; i++) print i }'",
+  "stderr": "",
+  "stdout": "0\n1\n2\n3\n4\n"
+}

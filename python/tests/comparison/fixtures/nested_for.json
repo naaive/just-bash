@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "for i in 1 2; do\n  for j in a b; do\n    echo \"$i$j\"\n  done\ndone",
+  "stderr": "",
+  "stdout": "1a\n1b\n2a\n2b\n"
+}

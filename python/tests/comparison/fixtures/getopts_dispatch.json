@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "process() {\n  local mode=quiet\n  while getopts \"vq\" opt; do\n    case $opt in\n      v) mode=verbose ;;\n      q) mode=quiet ;;\n    esac\n  done\n  shift $((OPTIND - 1))\n  echo \"mode=$mode arg=$1\"\n}\nprocess -v hello",
+  "stderr": "",
+  "stdout": "mode=verbose arg=hello\n"
+}

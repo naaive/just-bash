@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "awk '/foo/ { print \"hit:\", $0 } /bar/ { print \"bar:\", $0 }' <<EOF\nfoo\nbar\nfoobar\nbaz\nEOF",
+  "stderr": "",
+  "stdout": "hit: foo\nbar: bar\nhit: foobar\nbar: foobar\n"
+}

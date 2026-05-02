@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "declare -A counts\nbump() {\n  local -n m=$1\n  local key=$2\n  m[$key]=$(( ${m[$key]:-0} + 1 ))\n}\nfor c in red red blue green red blue; do\n  bump counts \"$c\"\ndone\nfor k in red green blue; do\n  echo \"$k: ${counts[$k]}\"\ndone",
+  "stderr": "",
+  "stdout": "red: 3\ngreen: 1\nblue: 2\n"
+}

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "outer() {\n  local val=outer-val\n  inner\n}\ninner() {\n  echo \"inner sees: $val\"\n}\nouter",
+  "stderr": "",
+  "stdout": "inner sees: outer-val\n"
+}

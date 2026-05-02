@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "p=foo.bar.baz; echo \"${p%%.*}\"; echo \"${unset:-fallback}\"",
+  "stderr": "",
+  "stdout": "foo\nfallback\n"
+}

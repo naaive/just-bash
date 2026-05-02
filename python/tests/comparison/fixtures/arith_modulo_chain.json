@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "for n in 7 12 19 33 100; do\n  printf '%d %% 3 = %d\\n' \"$n\" $((n % 3))\ndone",
+  "stderr": "",
+  "stdout": "7 % 3 = 1\n12 % 3 = 0\n19 % 3 = 1\n33 % 3 = 0\n100 % 3 = 1\n"
+}

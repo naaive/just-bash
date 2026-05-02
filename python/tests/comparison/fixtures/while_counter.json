@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "i=0\nwhile (( i < 3 )); do\n  echo \"i=$i\"\n  ((i++))\ndone",
+  "stderr": "",
+  "stdout": "i=0\ni=1\ni=2\n"
+}

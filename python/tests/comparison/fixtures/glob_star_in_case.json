@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "for n in foo.txt bar.md baz.tar.gz quux; do\n  case \"$n\" in\n    *.txt) echo \"$n: text\" ;;\n    *.md)  echo \"$n: markdown\" ;;\n    *.tar.gz) echo \"$n: archive\" ;;\n    *) echo \"$n: other\" ;;\n  esac\ndone",
+  "stderr": "",
+  "stdout": "foo.txt: text\nbar.md: markdown\nbaz.tar.gz: archive\nquux: other\n"
+}

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "shopt -s extglob; eval 'case ddd in +(d)) echo dees;; *) echo no;; esac'",
+  "stderr": "",
+  "stdout": "dees\n"
+}

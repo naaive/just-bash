@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "awk 'function double(x) { return x * 2 } { print double($1) }' <<EOF\n3\n5\n10\nEOF\n",
+  "stderr": "",
+  "stdout": "6\n10\n20\n"
+}

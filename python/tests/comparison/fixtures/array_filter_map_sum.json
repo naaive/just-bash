@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "src=(10 20 30 40 50)\nfilt=()\nfor n in \"${src[@]}\"; do\n  if (( n > 20 )); then\n    filt+=(\"$n\")\n  fi\ndone\nsum=0\nfor n in \"${filt[@]}\"; do\n  ((sum += n))\ndone\necho \"filtered: ${filt[@]}\"\necho \"sum: $sum\"",
+  "stderr": "",
+  "stdout": "filtered: 30 40 50\nsum: 120\n"
+}
