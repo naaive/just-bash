@@ -154,6 +154,19 @@ class Parser:
     def _is_reserved(self, tok: Token, *words: str) -> bool:
         return tok.kind is TokenKind.WORD and tok.text in words
 
+    def _drain_to_newline_for_heredoc(self) -> None:
+        """Force the lexer past the next NEWLINE so a heredoc body collects.
+
+        Heredoc bodies are gathered inside the lexer when it reads a NEWLINE.
+        Until that newline is read, ``op_tok.heredoc_body`` stays ``None``.
+        """
+        offset = 0
+        while True:
+            tok = self._peek(offset)
+            if tok.kind is TokenKind.NEWLINE or tok.kind is TokenKind.EOF:
+                return
+            offset += 1
+
     # ----------------------------------------------------------------- entry
     def parse(self) -> Script:
         statements: list[Statement] = []
@@ -321,6 +334,33 @@ class Parser:
             if assn is None:
                 break
             self._next()
+            # Array form: assignment text ends in ``=`` (or ``+=``) and the
+            # next token is ``(``. Read words until the matching ``)``.
+            if (
+                assn.value is None
+                and assn.array is None
+                and (tok.text.endswith("=") or tok.text.endswith("+="))
+                and self._peek().kind is TokenKind.OPERATOR
+                and self._peek().text == "("
+            ):
+                self._next()  # consume "("
+                arr_words: list[Word] = []
+                while True:
+                    nxt = self._peek()
+                    if nxt.kind is TokenKind.OPERATOR and nxt.text == ")":
+                        self._next()
+                        break
+                    if nxt.kind is TokenKind.NEWLINE:
+                        self._next()
+                        continue
+                    if nxt.kind is TokenKind.EOF:
+                        raise ParseError("unterminated array literal", nxt)
+                    if nxt.kind is TokenKind.WORD:
+                        arr_words.append(parse_word(nxt.text, line=nxt.line))
+                        self._next()
+                        continue
+                    raise ParseError("unexpected token in array literal", nxt)
+                assn.array = arr_words
             assignments.append(assn)
         # Command name.
         name: Word | None = None
@@ -366,12 +406,33 @@ class Parser:
         if tok.kind is not TokenKind.OPERATOR:
             raise ParseError("expected redirection operator", tok)
         op = tok.text
-        self._next()
+        op_tok = self._next()
+        # Heredocs: the lexer captured the delimiter on the operator token,
+        # but the body is only collected after the next NEWLINE the lexer
+        # reads. Force the lookahead to advance to that newline so the body
+        # is populated before we build the HereDoc node.
+        if op in ("<<", "<<-"):
+            self._drain_to_newline_for_heredoc()
+            body_text = op_tok.heredoc_body or ""
+            from just_bash.ast.nodes import Literal as LiteralNode
+
+            if op_tok.heredoc_quoted:
+                content = Word(line=op_tok.line, parts=[LiteralNode(value=body_text)])
+            else:
+                content = parse_word(body_text, line=op_tok.line, allow_tilde=False)
+            heredoc = HereDoc(
+                line=op_tok.line,
+                delimiter=op_tok.heredoc_delim or "",
+                content=content,
+                strip_tabs=op_tok.heredoc_strip_tabs,
+                quoted=op_tok.heredoc_quoted,
+            )
+            return Redirection(operator=op, target=heredoc, fd=fd, line=op_tok.line)  # type: ignore[arg-type]
         target_tok = self._next()
         if target_tok.kind is not TokenKind.WORD:
             raise ParseError("expected redirection target", target_tok)
         target_word = parse_word(target_tok.text, line=target_tok.line)
-        return Redirection(operator=op, target=target_word, fd=fd, line=tok.line)  # type: ignore[arg-type]
+        return Redirection(operator=op, target=target_word, fd=fd, line=op_tok.line)  # type: ignore[arg-type]
 
     # ------------------------------------------------------------------- if
     def _parse_if(self) -> If:

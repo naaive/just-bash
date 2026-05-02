@@ -209,9 +209,26 @@ def _scan_double_quoted_end(raw: str, start: int) -> int:
 
 def _parse_param_body(body: str, line: int) -> ParameterExpansion:
     """Decode the body inside ``${...}`` into a parameter name + operation."""
-    # ${#name} - length.
+    # ${!arr[@]} / ${!arr[*]} - array key list.
+    if body.startswith("!") and "[" in body and body.endswith("]"):
+        bracket = body.index("[")
+        name = body[1:bracket]
+        if name and (name[0].isalpha() or name[0] == "_"):
+            subscript = body[bracket + 1 : -1]
+            if subscript in ("@", "*"):
+                return ParameterExpansion(
+                    line=line, parameter=name, subscript=subscript, array_keys=True
+                )
+    # ${#name} or ${#name[@]} - length.
     if body.startswith("#") and len(body) > 1 and (body[1].isalpha() or body[1] == "_"):
-        return ParameterExpansion(line=line, parameter=body[1:], operation=Length())
+        rest = body[1:]
+        # Strip optional [@] / [*] / [N] off the name for length.
+        sub: str | None = None
+        if "[" in rest and rest.endswith("]"):
+            br = rest.index("[")
+            sub = rest[br + 1 : -1]
+            rest = rest[:br]
+        return ParameterExpansion(line=line, parameter=rest, operation=Length(), subscript=sub)
     name_end = 0
     while name_end < len(body) and (body[name_end].isalnum() or body[name_end] == "_"):
         name_end += 1
@@ -220,10 +237,25 @@ def _parse_param_body(body: str, line: int) -> ParameterExpansion:
         name_end = 1
     name = body[:name_end]
     rest = body[name_end:]
+    subscript: str | None = None
+    if rest.startswith("["):
+        # Find matching ] respecting nested brackets.
+        depth = 1
+        j = 1
+        while j < len(rest) and depth > 0:
+            if rest[j] == "[":
+                depth += 1
+            elif rest[j] == "]":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        subscript = rest[1:j]
+        rest = rest[j + 1 :]
     if not rest:
-        return ParameterExpansion(line=line, parameter=name)
+        return ParameterExpansion(line=line, parameter=name, subscript=subscript)
     op = _parse_param_op(rest, line)
-    return ParameterExpansion(line=line, parameter=name, operation=op)
+    return ParameterExpansion(line=line, parameter=name, operation=op, subscript=subscript)
 
 
 def _parse_param_op(rest: str, line: int) -> ParameterOp:

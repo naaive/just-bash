@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "if [ -z \"\" ]; then echo empty; else echo no; fi",
+  "stderr": "",
+  "stdout": "empty\n"
+}

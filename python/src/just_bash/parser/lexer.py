@@ -32,6 +32,13 @@ class Token:
     text: str
     line: int
     column: int
+    # ``heredoc_body`` / delimiter are set on ``<<`` / ``<<-`` operator
+    # tokens after the body has been collected by the lexer. This decouples
+    # body capture from the parser's token consumption.
+    heredoc_delim: str | None = None
+    heredoc_body: str | None = None
+    heredoc_quoted: bool = False
+    heredoc_strip_tabs: bool = False
 
 
 class LexError(Exception):
@@ -68,7 +75,7 @@ class Lexer:
     until ``EOF``. ``peek_token()`` is a one-token lookahead.
     """
 
-    __slots__ = ("_col", "_line", "_peeked", "_pos", "source")
+    __slots__ = ("_col", "_line", "_peeked", "_pending_heredocs", "_pos", "source")
 
     def __init__(self, source: str) -> None:
         self.source = source
@@ -76,6 +83,8 @@ class Lexer:
         self._line = 1
         self._col = 1
         self._peeked: Token | None = None
+        # Heredocs that need their body collected after the next newline.
+        self._pending_heredocs: list[Token] = []
 
     # ------------------------------------------------------------------ char IO
     def _eof(self) -> bool:
@@ -124,6 +133,10 @@ class Lexer:
 
         if ch == "\n":
             self._advance()
+            # If we just finished the line that introduced one or more
+            # heredocs, collect their bodies now.
+            if self._pending_heredocs:
+                self._collect_heredoc_bodies()
             return Token(TokenKind.NEWLINE, "\n", line, col)
 
         # \\\n is a line continuation: silently consume.
@@ -146,6 +159,20 @@ class Lexer:
             self._advance()
             self._advance()
             return Token(TokenKind.WORD, "]]", line, col)
+        # Heredoc: ``<<-DELIM`` and ``<<DELIM``. Must come before generic
+        # two-char ops so we capture the delimiter immediately.
+        if self._starts_with("<<-") and not self._starts_with("<<<"):
+            for _ in "<<-":
+                self._advance()
+            tok = Token(TokenKind.OPERATOR, "<<-", line, col, heredoc_strip_tabs=True)
+            self._read_heredoc_delimiter_into(tok)
+            return tok
+        if self._starts_with("<<") and not self._starts_with("<<<"):
+            self._advance()
+            self._advance()
+            tok = Token(TokenKind.OPERATOR, "<<", line, col)
+            self._read_heredoc_delimiter_into(tok)
+            return tok
         # Operators (longest match wins).
         for op in _THREE_CHAR_OPS:
             if self._starts_with(op):
@@ -175,6 +202,54 @@ class Lexer:
         # Word.
         text = self._read_word()
         return Token(TokenKind.WORD, text, line, col)
+
+    # ------------------------------------------------------------- heredocs
+    def _read_heredoc_delimiter_into(self, tok: Token) -> None:
+        """Read the delimiter that follows ``<<`` / ``<<-`` and queue body capture."""
+        # Skip horizontal whitespace, then read one word as the delimiter.
+        while not self._eof() and self._peek_char() in (" ", "\t"):
+            self._advance()
+        if self._eof() or self._peek_char() == "\n":
+            raise LexError("missing heredoc delimiter", tok.line, tok.column)
+        raw_delim = self._read_word()
+        # If any part of the delimiter was quoted, expansions inside the body
+        # are suppressed (matches bash semantics).
+        quoted = any(ch in raw_delim for ch in ("'", '"', "\\"))
+        clean = _strip_quotes(raw_delim)
+        tok.heredoc_quoted = quoted
+        tok.heredoc_delim = clean
+        self._pending_heredocs.append(tok)
+
+    def _collect_heredoc_bodies(self) -> None:
+        """Drain ``self._pending_heredocs`` reading their bodies from source."""
+        for tok in self._pending_heredocs:
+            delim = tok.heredoc_delim or ""
+            body_lines: list[str] = []
+            while not self._eof():
+                line_start = self._pos
+                # Read up to the next \n or EOF.
+                end = self.source.find("\n", line_start)
+                if end == -1:
+                    line = self.source[line_start:]
+                    self._pos = len(self.source)
+                    self._col += len(line)
+                    if line.strip("\t" if tok.heredoc_strip_tabs else "") == delim or line == delim:
+                        break
+                    body_lines.append(line.lstrip("\t") if tok.heredoc_strip_tabs else line)
+                    break
+                line = self.source[line_start:end]
+                check = line.lstrip("\t") if tok.heredoc_strip_tabs else line
+                if check == delim:
+                    self._pos = end + 1
+                    self._line += 1
+                    self._col = 1
+                    break
+                body_lines.append(line.lstrip("\t") if tok.heredoc_strip_tabs else line)
+                self._pos = end + 1
+                self._line += 1
+                self._col = 1
+            tok.heredoc_body = "\n".join(body_lines) + ("\n" if body_lines else "")
+        self._pending_heredocs = []
 
     # ----------------------------------------------------------- char-class IO
     def _skip_whitespace_and_comments(self) -> None:
@@ -408,3 +483,21 @@ def tokenize(source: str) -> list[Token]:
         out.append(tok)
         if tok.kind is TokenKind.EOF:
             return out
+
+
+def _strip_quotes(text: str) -> str:
+    """Remove enclosing quotes / backslashes from a heredoc delimiter word."""
+    out: list[str] = []
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch == "\\" and i + 1 < len(text):
+            out.append(text[i + 1])
+            i += 2
+            continue
+        if ch in ("'", '"'):
+            i += 1
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)

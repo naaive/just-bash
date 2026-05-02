@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "echo first > out.txt; echo second >> out.txt; cat out.txt",
+  "stderr": "",
+  "stdout": "first\nsecond\n"
+}

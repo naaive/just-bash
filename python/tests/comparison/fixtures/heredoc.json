@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "cat <<EOF\nhello $USER\nEOF\n",
+  "stderr": "",
+  "stdout": "hello \n"
+}

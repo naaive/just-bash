@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf \"b\\na\\nb\\nc\\na\\n\" | sort | uniq",
+  "stderr": "",
+  "stdout": "a\nb\nc\n"
+}

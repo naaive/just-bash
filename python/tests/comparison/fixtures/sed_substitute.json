@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "echo \"foo bar foo\" | sed \"s/foo/baz/g\"",
+  "stderr": "",
+  "stdout": "baz bar baz\n"
+}

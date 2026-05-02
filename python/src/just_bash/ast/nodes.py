@@ -55,10 +55,16 @@ class DoubleQuoted(Node):
 
 @dataclass(slots=True)
 class ParameterExpansion(Node):
-    """``$VAR`` or ``${VAR...}`` with an optional operation."""
+    """``$VAR`` or ``${VAR...}`` with an optional operation.
+
+    ``subscript`` carries an array index when the source is ``${arr[i]}``,
+    ``${arr[@]}`` or ``${arr[*]}``. Plain ``$VAR`` leaves it ``None``.
+    """
 
     parameter: str = ""
     operation: ParameterOp | None = None
+    subscript: str | None = None  # raw text inside [...]; "@" / "*" are special
+    array_keys: bool = False  # ${!arr[@]} / ${!arr[*]}
 
 
 @dataclass(slots=True)

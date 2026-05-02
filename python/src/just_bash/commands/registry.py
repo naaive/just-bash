@@ -9,6 +9,7 @@ from just_bash.commands import (
     awk_cmd,
     basic,
     cp_mv_rm,
+    extra,
     find_cmd,
     grep_cmd,
     sed_cmd,
@@ -57,6 +58,20 @@ def default_registry() -> dict[str, CommandImpl]:
         "mv": cp_mv_rm.cmd_mv,
         "rm": cp_mv_rm.cmd_rm,
         "ln": cp_mv_rm.cmd_ln,
+        # phase-2 extras
+        "seq": extra.cmd_seq,
+        "expr": extra.cmd_expr,
+        "sleep": extra.cmd_sleep,
+        "date": extra.cmd_date,
+        "paste": extra.cmd_paste,
+        "comm": extra.cmd_comm,
+        "diff": extra.cmd_diff,
+        "md5sum": extra.cmd_md5sum,
+        "sha1sum": extra.cmd_sha1sum,
+        "sha256sum": extra.cmd_sha256sum,
+        "realpath": extra.cmd_realpath,
+        "stat": extra.cmd_stat,
+        "xargs": extra.cmd_xargs,
     }
 
 

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "arr=(\"a b\" c); for x in \"${arr[@]}\"; do echo \"<$x>\"; done",
+  "stderr": "",
+  "stdout": "<a b>\n<c>\n"
+}

@@ -17,6 +17,7 @@ for assignments / patterns / heredocs.
 from __future__ import annotations
 
 import fnmatch
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from just_bash.ast.nodes import (
@@ -76,7 +77,7 @@ def expand_word(interp: Interpreter, word: Word) -> list[str]:
 def expand_word_no_split(interp: Interpreter, word: Word) -> str:
     """Expand a word as if it were inside double quotes - no word split / no glob."""
     pieces = _expand_to_pieces(interp, word, force_quoted=True)
-    return "".join(text for text, _ in pieces)
+    return "".join(p.text for p in pieces)
 
 
 def expand_pattern(interp: Interpreter, word: Word) -> str:
@@ -88,12 +89,12 @@ def expand_pattern(interp: Interpreter, word: Word) -> str:
     """
     pieces = _expand_to_pieces(interp, word)
     out: list[str] = []
-    for text, quoted in pieces:
-        if quoted:
+    for p in pieces:
+        if p.quoted:
             # Escape glob metacharacters so they're treated literally.
-            out.append(_escape_glob(text))
+            out.append(_escape_glob(p.text))
         else:
-            out.append(text)
+            out.append(p.text)
     return "".join(out)
 
 
@@ -157,7 +158,18 @@ def _pad(n: int, width: int) -> str:
 # ---------------------------------------------------------------------------
 
 
-_Piece = tuple[str, bool]  # (text, quoted)
+@dataclass(slots=True)
+class _Piece:
+    """One fragment of a partially-expanded word.
+
+    ``end_field`` is set on the boundary between elements of ``"${arr[@]}"``
+    so that word splitting honors the array's existing field boundaries even
+    when the whole expansion is inside double quotes.
+    """
+
+    text: str
+    quoted: bool
+    end_field: bool = False
 
 
 def _expand_to_pieces(
@@ -174,35 +186,88 @@ def _expand_to_pieces(
 
 def _expand_part(interp: Interpreter, part: WordPart, *, force_quoted: bool) -> list[_Piece]:
     if isinstance(part, Literal):
-        return [(part.value, force_quoted)]
+        return [_Piece(part.value, force_quoted)]
     if isinstance(part, SingleQuoted):
-        return [(part.value, True)]
+        return [_Piece(part.value, True)]
     if isinstance(part, Escaped):
-        return [(part.value, True)]
+        return [_Piece(part.value, True)]
     if isinstance(part, DoubleQuoted):
         pieces: list[_Piece] = []
         for inner in part.parts:
             pieces.extend(_expand_part(interp, inner, force_quoted=True))
         return pieces
     if isinstance(part, ParameterExpansion):
-        return [(_expand_parameter(interp, part), force_quoted)]
+        return _expand_parameter_pieces(interp, part, force_quoted)
     if isinstance(part, CommandSubstitution):
-        return [(_expand_command_sub(interp, part), force_quoted)]
+        return [_Piece(_expand_command_sub(interp, part), force_quoted)]
     if isinstance(part, ArithmeticExpansion):
         from just_bash.interpreter.arithmetic import eval_arith
 
-        return [(str(eval_arith(interp, part.expression)), force_quoted)]
+        return [_Piece(str(eval_arith(interp, part.expression)), force_quoted)]
     if isinstance(part, TildeExpansion):
         home = interp.env.get("HOME") if part.user is None else None
         if home is None:
-            return [("~" + (part.user or ""), force_quoted)]
-        return [(home, force_quoted)]
+            return [_Piece("~" + (part.user or ""), force_quoted)]
+        return [_Piece(home, force_quoted)]
     raise InterpreterError(f"unsupported word part: {type(part).__name__}")
+
+
+def _expand_parameter_pieces(
+    interp: Interpreter, part: ParameterExpansion, force_quoted: bool
+) -> list[_Piece]:
+    """Like ``_expand_parameter`` but returns one piece per array field."""
+    is_at_star = part.subscript in ("@", "*") or part.parameter in ("@", "*")
+    splat_form = part.subscript if part.subscript in ("@", "*") else part.parameter
+    if is_at_star or part.array_keys:
+        elements = _read_array_elements(interp, part)
+        if part.array_keys:
+            elements = [str(i) for i in range(len(elements))]
+        if isinstance(part.operation, Length):
+            return [_Piece(str(len(elements)), force_quoted)]
+        if splat_form == "*" and force_quoted:
+            ifs = interp.env.get("IFS") or " \t\n"
+            sep = ifs[0] if ifs else " "
+            return [_Piece(sep.join(elements), force_quoted)]
+        # ``$@`` / ``"$@"`` / ``${arr[@]}`` etc. produce one field per element.
+        return [_Piece(e, force_quoted, end_field=True) for e in elements]
+    return [_Piece(_expand_parameter(interp, part), force_quoted)]
+
+
+def _read_array_elements(interp: Interpreter, part: ParameterExpansion) -> list[str]:
+    name = part.parameter
+    if name in ("@", "*"):
+        return list(interp.env.positional)
+    arr = interp.env.get_array(name)
+    if arr is not None:
+        return list(arr)
+    val = interp.env.get(name)
+    if val is None:
+        return []
+    return [val]
 
 
 def _expand_parameter(interp: Interpreter, part: ParameterExpansion) -> str:
     name = part.parameter
-    raw_value = _read_parameter(interp, name)
+    if part.subscript is not None and part.subscript not in ("@", "*"):
+        # Numeric index into an array: ${arr[3]} (subscript may be an
+        # arithmetic / parameter / command expansion, e.g. ${arr[$((i+1))]}).
+        from just_bash.interpreter.arithmetic import eval_arith
+        from just_bash.parser.arithmetic_parser import parse_arith_text
+        from just_bash.parser.word_parser import parse_word
+
+        # First expand the subscript text via the word machinery, then parse
+        # the result as an arithmetic expression.
+        sub_word = parse_word(part.subscript, line=part.line)
+        expanded = expand_word_no_split(interp, sub_word)
+        idx = eval_arith(interp, parse_arith_text(expanded.strip() or "0"))
+        arr = interp.env.get_array(name)
+        if arr is None:
+            scalar = interp.env.get(name) or ""
+            raw_value: str | None = scalar if idx == 0 else None
+        else:
+            raw_value = arr[idx] if 0 <= idx < len(arr) else None
+    else:
+        raw_value = _read_parameter(interp, name)
     op = part.operation
     if op is None:
         return raw_value or ""
@@ -300,7 +365,8 @@ def _word_split(pieces: list[_Piece], ifs: str | None) -> list[tuple[str, bool]]
 
     Returns a list of ``(field_text, had_quoted_part)`` pairs. Quoted pieces
     contribute their full text and never start a new field on their own
-    boundaries.
+    boundaries, but a piece marked ``end_field`` always closes the current
+    field (used for ``"${arr[@]}"`` boundaries).
     """
     if ifs is None:
         ifs = " \t\n"
@@ -309,10 +375,19 @@ def _word_split(pieces: list[_Piece], ifs: str | None) -> list[tuple[str, bool]]
     fields: list[tuple[str, bool]] = []
     current = ""
     had_quoted = False
-    for text, quoted in pieces:
-        if quoted:
+    for piece in pieces:
+        text, quoted = piece.text, piece.quoted
+        if quoted and not piece.end_field:
             current += text
             had_quoted = True
+            continue
+        if piece.end_field:
+            # Array-element boundary: emit (text + current) and break field.
+            current += text
+            had_quoted = had_quoted or quoted
+            fields.append((current, had_quoted))
+            current = ""
+            had_quoted = False
             continue
         # Walk text char-by-char looking for IFS chars.
         i = 0

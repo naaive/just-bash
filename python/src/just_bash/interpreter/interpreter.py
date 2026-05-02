@@ -345,6 +345,9 @@ class Interpreter:
             values: list[str] = []
             for w in assn.array:
                 values.extend(expand_word(self, w))
+            if assn.append:
+                existing = self.env.get_array(assn.name) or []
+                values = [*existing, *values]
             self.env.set_array(assn.name, values, exported=exported)
             return
         value = expand_word_no_split(self, assn.value) if assn.value is not None else ""
@@ -424,14 +427,9 @@ class Interpreter:
         io_ctx: IO,
         writes: list[tuple[str, bytes, bool]],
     ) -> None:
-        # Heredocs (deferred for MVP) and here-strings.
+        # Heredocs and here-strings.
         if isinstance(r.target, HereDoc):
-            if r.target.quoted:
-                target_text = "".join(
-                    getattr(p, "value", "") for p in r.target.content.parts
-                )
-            else:
-                target_text = expand_word_no_split(self, r.target.content)
+            target_text = expand_word_no_split(self, r.target.content)
             io_ctx.stdin = target_text.encode("utf-8")
             return
         path = expand_word_no_split(self, r.target)

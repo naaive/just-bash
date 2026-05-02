@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "for i in 1 2 3; do echo $i; done",
+  "stderr": "",
+  "stdout": "1\n2\n3\n"
+}
