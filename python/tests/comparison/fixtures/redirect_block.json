@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "{ echo a; echo b; echo c; } > /tmp/blk; cat /tmp/blk",
+  "stderr": "",
+  "stdout": "a\nb\nc\n"
+}

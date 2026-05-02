@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "mkdir -p /tmp/g\n: > /tmp/g/a.txt\n: > /tmp/g/b.txt\nfor f in /tmp/g/*.txt; do\n  echo \"$f\"\ndone | sort",
+  "stderr": "",
+  "stdout": "/tmp/g/a.txt\n/tmp/g/b.txt\n"
+}

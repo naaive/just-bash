@@ -238,6 +238,22 @@ def _expand_parameter_pieces(
     interp: Interpreter, part: ParameterExpansion, force_quoted: bool
 ) -> list[_Piece]:
     """Like ``_expand_parameter`` but returns one piece per array field."""
+    # ``${!prefix*}`` / ``${!prefix@}`` - list of variable names with prefix.
+    if part.name_prefix:
+        names = sorted(n for n in interp.env.all_var_names() if n.startswith(part.parameter))
+        if part.subscript == "*" and force_quoted:
+            ifs = interp.env.get("IFS") or " \t\n"
+            sep = ifs[0] if ifs else " "
+            return [_Piece(sep.join(names), force_quoted)]
+        return [_Piece(n, force_quoted, end_field=True) for n in names]
+    # ``${!ref[@]}`` etc. — indirect AT/STAR isn't fully supported; resolve
+    # the indirection to a plain reference first.
+    if (
+        part.indirect
+        and not part.array_keys
+        and not (part.subscript in ("@", "*") or part.parameter in ("@", "*"))
+    ):
+        return [_Piece(_expand_parameter(interp, part), force_quoted)]
     is_at_star = part.subscript in ("@", "*") or part.parameter in ("@", "*")
     splat_form = part.subscript if part.subscript in ("@", "*") else part.parameter
     if is_at_star or part.array_keys:
@@ -276,6 +292,13 @@ def _read_array_elements(interp: Interpreter, part: ParameterExpansion) -> list[
 
 def _expand_parameter(interp: Interpreter, part: ParameterExpansion) -> str:
     name = part.parameter
+    if part.indirect:
+        # ``${!ref}``: read ``$ref`` to get the actual variable name, then
+        # read that. Honour the same operator suffix afterwards.
+        ref_value = interp.env.get(name) or ""
+        name = ref_value.strip()
+        if not name:
+            return ""
     if part.subscript is not None and part.subscript not in ("@", "*"):
         # Indexed or associative array access: ``${arr[key]}``.
         from just_bash.parser.word_parser import parse_word

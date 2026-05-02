@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "declare -A m\nm[apple]=1\nm[banana]=2\nm[cherry]=3\nfor k in \"${!m[@]}\"; do\n  echo \"$k=${m[$k]}\"\ndone | sort",
+  "stderr": "",
+  "stdout": "apple=1\nbanana=2\ncherry=3\n"
+}

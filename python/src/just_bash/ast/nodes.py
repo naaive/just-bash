@@ -65,6 +65,8 @@ class ParameterExpansion(Node):
     operation: ParameterOp | None = None
     subscript: str | None = None  # raw text inside [...]; "@" / "*" are special
     array_keys: bool = False  # ${!arr[@]} / ${!arr[*]}
+    indirect: bool = False  # ${!ref}: dereference $parameter, then read that var
+    name_prefix: bool = False  # ${!prefix*} / ${!prefix@}: list matching var names
 
 
 @dataclass(slots=True)

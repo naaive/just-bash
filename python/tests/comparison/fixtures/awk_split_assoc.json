@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "awk 'BEGIN {\n  n = split(\"a:b:c:a:b\", parts, \":\")\n  for (i = 1; i <= n; i++) counts[parts[i]]++\n  for (k in counts) print k, counts[k]\n}' | sort",
+  "stderr": "",
+  "stdout": "a 2\nb 2\nc 1\n"
+}

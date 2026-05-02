@@ -221,16 +221,38 @@ def _scan_double_quoted_end(raw: str, start: int) -> int:
 
 def _parse_param_body(body: str, line: int) -> ParameterExpansion:
     """Decode the body inside ``${...}`` into a parameter name + operation."""
-    # ${!arr[@]} / ${!arr[*]} - array key list.
-    if body.startswith("!") and "[" in body and body.endswith("]"):
-        bracket = body.index("[")
-        name = body[1:bracket]
-        if name and (name[0].isalpha() or name[0] == "_"):
+    # ``${!ref}`` / ``${!ref[@]}`` / ``${!prefix*}`` / ``${!prefix@}`` family.
+    if body.startswith("!") and len(body) > 1 and (body[1].isalpha() or body[1] == "_"):
+        # Array keys: ``${!arr[@]}`` / ``${!arr[*]}``.
+        if "[" in body and body.endswith("]"):
+            bracket = body.index("[")
+            name = body[1:bracket]
             subscript = body[bracket + 1 : -1]
             if subscript in ("@", "*"):
                 return ParameterExpansion(
                     line=line, parameter=name, subscript=subscript, array_keys=True
                 )
+        # Var-name prefix list: ``${!prefix*}`` / ``${!prefix@}``.
+        if body.endswith("*") or body.endswith("@"):
+            prefix = body[1:-1]
+            if all(c.isalnum() or c == "_" for c in prefix):
+                return ParameterExpansion(
+                    line=line,
+                    parameter=prefix,
+                    name_prefix=True,
+                    subscript=body[-1],
+                )
+        # Indirect ``${!ref}`` followed by an optional standard operator
+        # (``${!ref:-default}`` etc.). Find where the identifier ends.
+        i = 1
+        while i < len(body) and (body[i].isalnum() or body[i] == "_"):
+            i += 1
+        ref_name = body[1:i]
+        rest = body[i:]
+        if not rest:
+            return ParameterExpansion(line=line, parameter=ref_name, indirect=True)
+        op = _parse_param_op(rest, line)
+        return ParameterExpansion(line=line, parameter=ref_name, operation=op, indirect=True)
     # ${#name} or ${#name[@]} - length.
     if body.startswith("#") and len(body) > 1 and (body[1].isalpha() or body[1] == "_"):
         rest = body[1:]

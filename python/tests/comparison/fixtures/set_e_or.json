@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "set -e; false || true; echo survived",
+  "stderr": "",
+  "stdout": "survived\n"
+}

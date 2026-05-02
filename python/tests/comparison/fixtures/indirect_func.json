@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "greet() {\n  local var=$1\n  echo \"${!var}\"\n}\nhello=world\ngreet hello",
+  "stderr": "",
+  "stdout": "world\n"
+}

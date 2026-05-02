@@ -68,6 +68,21 @@ def default_builtins() -> dict[str, Builtin]:
         "ulimit": _b_ulimit,
         "history": _b_history,
         "help": _b_help,
+        "mapfile": _b_mapfile,
+        "readarray": _b_mapfile,
+        "wait": _b_wait,
+        "jobs": _b_jobs,
+        "disown": _b_disown,
+        "bg": _b_noop,
+        "fg": _b_noop,
+        "enable": _b_noop,
+        "compgen": _b_compgen,
+        "complete": _b_noop,
+        "bind": _b_noop,
+        "caller": _b_caller,
+        "logout": _b_exit,
+        "suspend": _b_noop,
+        "hash": _b_hash,
     }
 
 
@@ -752,6 +767,105 @@ def _b_history(_interp: Interpreter, _argv: list[str], _io: IO) -> int:
 
 def _b_help(_interp: Interpreter, _argv: list[str], io_ctx: IO) -> int:
     io_ctx.stdout.write(b"GNU bash, sandboxed (just-bash-py): see README for supported builtins.\n")
+    return 0
+
+
+def _b_mapfile(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
+    """``mapfile [-t] [-d DELIM] [-n COUNT] [VARNAME]`` - read into an array.
+
+    ``-t`` strips the line terminator. ``-d DELIM`` overrides the default
+    newline separator. ``-n N`` reads at most N elements.
+    """
+    args = argv[1:]
+    strip = False
+    delim = "\n"
+    count: int | None = None
+    name = "MAPFILE"
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "-t":
+            strip = True
+            i += 1
+            continue
+        if a == "-d" and i + 1 < len(args):
+            delim = args[i + 1]
+            i += 2
+            continue
+        if a == "-n" and i + 1 < len(args):
+            count = int(args[i + 1])
+            i += 2
+            continue
+        if a.startswith("-"):
+            io_ctx.stderr.write(f"mapfile: unknown option {a}\n".encode())
+            return 2
+        name = a
+        i += 1
+        break
+    data = io_ctx.stdin.decode("utf-8", errors="replace")
+    if delim == "":
+        # ``-d ''`` = NUL-separated.
+        delim = "\0"
+    parts = data.split(delim)
+    if data.endswith(delim):
+        parts = parts[:-1]
+    if not strip:
+        parts = [p + delim for p in parts]
+    if count is not None:
+        parts = parts[:count]
+    interp.env.set_array(name, parts)
+    return 0
+
+
+def _b_wait(interp: Interpreter, _argv: list[str], _io: IO) -> int:
+    # No background jobs in this sandbox - wait is a no-op success.
+    del interp
+    return 0
+
+
+def _b_jobs(_interp: Interpreter, _argv: list[str], _io: IO) -> int:
+    return 0
+
+
+def _b_disown(_interp: Interpreter, _argv: list[str], _io: IO) -> int:
+    return 0
+
+
+def _b_noop(_interp: Interpreter, _argv: list[str], _io: IO) -> int:
+    return 0
+
+
+def _b_compgen(_interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
+    """``compgen -W "word list" prefix`` - very small completion-helper."""
+    args = argv[1:]
+    words: list[str] = []
+    prefix = ""
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "-W" and i + 1 < len(args):
+            words = args[i + 1].split()
+            i += 2
+            continue
+        if a.startswith("-"):
+            i += 1
+            continue
+        prefix = a
+        i += 1
+    out = [w for w in words if w.startswith(prefix)]
+    if out:
+        io_ctx.stdout.write(("\n".join(out) + "\n").encode())
+    return 0 if out else 1
+
+
+def _b_caller(interp: Interpreter, _argv: list[str], io_ctx: IO) -> int:
+    # We don't track call stack lines; emit a placeholder for compatibility.
+    io_ctx.stdout.write(b"0 NULL\n")
+    del interp
+    return 0
+
+
+def _b_hash(_interp: Interpreter, _argv: list[str], _io: IO) -> int:
     return 0
 
 
