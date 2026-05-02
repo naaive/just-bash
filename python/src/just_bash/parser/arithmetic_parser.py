@@ -271,6 +271,16 @@ class _Parser:
             name = self.text[self.pos : j]
             self.pos = j + 1
             return ArithVariable(name=name)
+        # Special positional / status variables: $#, $?, $$, $!, $0..$9.
+        if self.text[self.pos] in "#?$!" or self.text[self.pos].isdigit():
+            ch = self.text[self.pos]
+            self.pos += 1
+            if ch.isdigit():
+                # Greedy digit run for $10..$99 (positional params).
+                while self.pos < len(self.text) and self.text[self.pos].isdigit():
+                    ch += self.text[self.pos]
+                    self.pos += 1
+            return ArithVariable(name=ch)
         return self._parse_variable()
 
     def _parse_number(self) -> ArithNumber:

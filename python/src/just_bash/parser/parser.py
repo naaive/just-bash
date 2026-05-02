@@ -42,6 +42,9 @@ from just_bash.ast.nodes import (
     While,
     Word,
 )
+from just_bash.ast.nodes import (
+    Literal as _LiteralNode,
+)
 from just_bash.parser.arithmetic_parser import parse_arith_text
 from just_bash.parser.lexer import Lexer, Token, TokenKind
 from just_bash.parser.word_parser import parse_word
@@ -81,6 +84,11 @@ _RESERVED_WORDS = frozenset(
     }
 )
 _TERMINATORS = frozenset({";", "\n", "&"})
+
+# Commands whose ``NAME=...`` arguments are part of an assignment context.
+# Mirrors ``Interpreter._ASSIGN_CONTEXT_CMDS`` — kept in the parser so we can
+# recognise ``declare -A m=([k]=v ...)`` compound initialisers.
+_ASSIGN_CONTEXT_NAMES = frozenset({"declare", "typeset", "local", "export", "readonly"})
 _BINARY_COND_OPS = frozenset(
     {"=", "==", "!=", "=~", "<", ">", "-eq", "-ne", "-lt", "-le", "-gt", "-ge", "-nt", "-ot", "-ef"}
 )
@@ -395,6 +403,46 @@ class Parser:
                 if first_word and name is None:
                     name = w
                 else:
+                    # ``declare -A NAME=(elem ...)`` — when we're in an
+                    # assignment-context command and an arg ends with ``=``
+                    # or ``+=`` immediately followed by ``(``, gather the
+                    # compound array literal back into a single arg string
+                    # so the builtin can re-parse it.
+                    if (
+                        name is not None
+                        and len(name.parts) == 1
+                        and isinstance(name.parts[0], _LiteralNode)
+                        and name.parts[0].value in _ASSIGN_CONTEXT_NAMES
+                        and (tok.text.endswith("=") or tok.text.endswith("+="))
+                        and self._peek().kind is TokenKind.OPERATOR
+                        and self._peek().text == "("
+                    ):
+                        self._next()  # consume "("
+                        words: list[str] = [tok.text, "("]
+                        while True:
+                            nxt = self._peek()
+                            if nxt.kind is TokenKind.OPERATOR and nxt.text == ")":
+                                self._next()
+                                words.append(")")
+                                break
+                            if nxt.kind is TokenKind.NEWLINE:
+                                self._next()
+                                continue
+                            if nxt.kind is TokenKind.EOF:
+                                raise ParseError("unterminated compound array literal", nxt)
+                            if nxt.kind is TokenKind.WORD:
+                                words.append(nxt.text)
+                                self._next()
+                                continue
+                            raise ParseError("unexpected token in compound array literal", nxt)
+                        # Re-emit as a single word so ``_b_declare`` sees the
+                        # full ``name=(elem elem)`` string. Elements are
+                        # joined with NUL (\x00) so values containing real
+                        # whitespace survive expansion + re-splitting.
+                        glued = words[0] + "(" + "\x00".join(words[2:-1]) + ")"
+                        args.append(parse_word(glued, line=tok.line))
+                        first_word = False
+                        continue
                     args.append(w)
                 first_word = False
                 continue

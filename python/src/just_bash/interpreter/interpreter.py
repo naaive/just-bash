@@ -492,14 +492,27 @@ class Interpreter:
             sub_word = parse_word(assn.subscript, line=assn.line)
             sub_text = expand_word_no_split(self, sub_word)
             if existing is not None and existing.assoc is not None:
+                if assn.append:
+                    prior = (existing.assoc or {}).get(sub_text, "")
+                    value = prior + value
                 self.env.set_assoc_element(assn.name, sub_text, value)
                 return
             try:
                 idx = int(sub_text)
             except ValueError:
                 # Treat as associative if the key isn't numeric.
+                if assn.append:
+                    prior = (existing.assoc or {}).get(sub_text, "") if existing else ""
+                    value = prior + value
                 self.env.set_assoc_element(assn.name, sub_text, value)
                 return
+            if (
+                assn.append
+                and existing is not None
+                and existing.array is not None
+                and 0 <= idx < len(existing.array)
+            ):
+                value = existing.array[idx] + value
             self.env.set_array_element(assn.name, idx, value)
             return
         try:
