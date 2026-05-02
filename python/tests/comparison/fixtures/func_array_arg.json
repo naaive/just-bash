@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "collect() {\n  local IFS=,\n  echo \"$*\"\n}\ncollect alpha beta gamma",
+  "stderr": "",
+  "stdout": "alpha,beta,gamma\n"
+}

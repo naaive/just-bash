@@ -26,6 +26,7 @@ from just_bash.ast.nodes import (
     BraceExpansion,
     BraceRange,
     BraceWord,
+    CaseModification,
     CommandSubstitution,
     DefaultValue,
     DoubleQuoted,
@@ -40,6 +41,7 @@ from just_bash.ast.nodes import (
     SingleQuoted,
     Substring,
     TildeExpansion,
+    Transform,
     UseAlternative,
     Word,
     WordPart,
@@ -352,7 +354,75 @@ def _expand_parameter(interp: Interpreter, part: ParameterExpansion) -> str:
         return _replace_pattern(
             s, pattern, replacement, all_occ=op.all_occurrences, anchor=op.anchor
         )
+    if isinstance(op, CaseModification):
+        s = raw_value or ""
+        pat: str | None = None
+        if op.pattern is not None:
+            pat = expand_pattern(interp, op.pattern)
+        return _case_modify(s, direction=op.direction, all_chars=op.all_chars, pattern=pat)
+    if isinstance(op, Transform):
+        return _transform(raw_value or "", op.operator)
     raise InterpreterError(f"unsupported parameter operation: {type(op).__name__}")
+
+
+def _case_modify(s: str, *, direction: str, all_chars: bool, pattern: str | None) -> str:
+    """Apply ``^^`` / ``^`` / ``,,`` / ``,`` case modification.
+
+    With a pattern, only characters that match the pattern (interpreted as a
+    one-char fnmatch glob) are folded. The default pattern matches any char.
+    """
+    if not s:
+        return s
+    fold = (lambda c: c.upper()) if direction == "upper" else (lambda c: c.lower())
+    if pattern is None or pattern in ("", "?"):
+        if all_chars:
+            return fold(s)
+        return fold(s[0]) + s[1:]
+    import fnmatch as _fn
+
+    def maybe(c: str) -> str:
+        return fold(c) if _fn.fnmatchcase(c, pattern) else c
+
+    if all_chars:
+        return "".join(maybe(c) for c in s)
+    return maybe(s[0]) + s[1:]
+
+
+def _transform(s: str, op: str) -> str:
+    """Apply ``${VAR@op}`` transformation.
+
+    ``Q`` shell-quotes the value, ``E`` interprets backslash escapes,
+    ``U``/``L``/``u`` change case, ``A`` returns an attribute-recreate
+    snippet, ``P`` expands as a prompt (degenerate here). Unsupported
+    operators return the value unchanged.
+    """
+    if op == "Q":
+        import shlex
+
+        return shlex.quote(s)
+    if op == "E":
+        # ``$'...'``-style escape interpretation.
+        out: list[str] = []
+        i = 0
+        while i < len(s):
+            ch = s[i]
+            if ch == "\\" and i + 1 < len(s):
+                nxt = s[i + 1]
+                out.append({"n": "\n", "t": "\t", "r": "\r", "\\": "\\", "0": "\0"}.get(nxt, nxt))
+                i += 2
+                continue
+            out.append(ch)
+            i += 1
+        return "".join(out)
+    if op == "U":
+        return s.upper()
+    if op == "L":
+        return s.lower()
+    if op == "u":
+        return s[:1].upper() + s[1:] if s else s
+    if op in ("A", "K", "k", "P", "a"):
+        return s
+    return s
 
 
 def _read_parameter(interp: Interpreter, name: str) -> str | None:

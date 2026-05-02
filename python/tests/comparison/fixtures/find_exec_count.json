@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "mkdir -p /tmp/r; printf \"x\\n\" > /tmp/r/a; printf \"x\\ny\\n\" > /tmp/r/b; find /tmp/r -type f | sort",
+  "stderr": "",
+  "stdout": "/tmp/r/a\n/tmp/r/b\n"
+}

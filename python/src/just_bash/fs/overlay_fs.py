@@ -189,13 +189,16 @@ class OverlayFs:
         if self._whiteout(absolute):
             raise FsError("ENOENT", absolute, "no such file or directory")
         names: set[str] = set()
-        # Real entries.
+        # Real entries - skip ones that would fail the symlink / containment
+        # gate so a subsequent ``stat`` on each name doesn't raise ENOENT.
         real = self._real_path(absolute)
         if real is not None:
             try:
                 for entry in os.scandir(real):
                     full = path_utils.join(absolute, entry.name)
                     if self._whiteout(full):
+                        continue
+                    if self._real_path(full) is None:
                         continue
                     names.add(entry.name)
             except OSError:

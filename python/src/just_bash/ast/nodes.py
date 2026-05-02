@@ -227,6 +227,22 @@ class PatternReplacement:
     anchor: LiteralT["start", "end"] | None
 
 
+@dataclass(slots=True)
+class CaseModification:
+    """``${VAR^}``, ``${VAR^^}``, ``${VAR,}``, ``${VAR,,}`` - case folding."""
+
+    direction: LiteralT["upper", "lower"] = "upper"
+    all_chars: bool = False
+    pattern: Word | None = None  # optional pattern, e.g. ``${VAR^^[a-c]}``
+
+
+@dataclass(slots=True)
+class Transform:
+    """``${VAR@op}`` - ``Q`` quote, ``E`` escape, ``U`` upper, ``L`` lower, ``a`` attrs."""
+
+    operator: LiteralT["Q", "E", "U", "L", "u", "P", "K", "k", "A", "a"] = "Q"
+
+
 ParameterOp = (
     DefaultValue
     | AssignDefault
@@ -236,6 +252,8 @@ ParameterOp = (
     | Substring
     | PatternRemoval
     | PatternReplacement
+    | CaseModification
+    | Transform
 )
 
 

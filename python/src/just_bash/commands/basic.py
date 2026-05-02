@@ -175,9 +175,21 @@ def cmd_touch(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _split_legacy_n_flag(argv: list[str]) -> list[str]:
+    """Translate the legacy ``-N`` shorthand (e.g. ``head -3``) into ``-n N``."""
+    out: list[str] = []
+    for arg in argv:
+        if arg.startswith("-") and len(arg) > 1 and arg[1:].isdigit() and not arg.startswith("--"):
+            out.append("-n")
+            out.append(arg[1:])
+            continue
+        out.append(arg)
+    return out
+
+
 def cmd_head(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
     try:
-        flags, paths = parse_flags(argv, boolean=set(), valued={"-n", "-c"})
+        flags, paths = parse_flags(_split_legacy_n_flag(argv), boolean=set(), valued={"-n", "-c"})
     except ValueError as e:
         write_err(io_ctx, f"head: {e}\n")
         return 2
@@ -195,7 +207,7 @@ def cmd_head(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
 
 def cmd_tail(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
     try:
-        flags, paths = parse_flags(argv, boolean=set(), valued={"-n", "-c"})
+        flags, paths = parse_flags(_split_legacy_n_flag(argv), boolean=set(), valued={"-n", "-c"})
     except ValueError as e:
         write_err(io_ctx, f"tail: {e}\n")
         return 2

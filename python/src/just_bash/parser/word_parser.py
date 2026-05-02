@@ -305,6 +305,25 @@ def _parse_param_op(rest: str, line: int) -> ParameterOp:
     # Pattern replacement: /pat/repl, //pat/repl, /#pat/repl, /%pat/repl
     if rest.startswith("/"):
         return _parse_replacement_op(rest[1:], line)
+    # Case modification: ``${VAR^^}`` upper-all, ``${VAR^}`` upper-first,
+    # ``${VAR,,}`` lower-all, ``${VAR,}`` lower-first; with optional pattern.
+    if rest.startswith("^") or rest.startswith(","):
+        from just_bash.ast.nodes import CaseModification
+
+        first = rest[0]
+        all_chars = len(rest) >= 2 and rest[1] == first
+        body = rest[2:] if all_chars else rest[1:]
+        pat_word = parse_word(body, line=line) if body else None
+        return CaseModification(
+            direction="upper" if first == "^" else "lower",
+            all_chars=all_chars,
+            pattern=pat_word,
+        )
+    # Transform: ``${VAR@Q}`` and friends.
+    if rest.startswith("@") and len(rest) == 2 and rest[1] in "QEULuPKkAa":
+        from just_bash.ast.nodes import Transform
+
+        return Transform(operator=rest[1])  # type: ignore[arg-type]
     raise WordParseError(f"unsupported parameter operator: {rest!r}")
 
 

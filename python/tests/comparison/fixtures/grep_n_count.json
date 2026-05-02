@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf \"%s\\n\" foo bar foo baz | grep -n foo",
+  "stderr": "",
+  "stdout": "1:foo\n3:foo\n"
+}

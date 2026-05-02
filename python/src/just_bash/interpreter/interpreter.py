@@ -35,6 +35,7 @@ from just_bash.ast.nodes import (
     While,
     Word,
 )
+from just_bash.fs.overlay_fs import OverlayFs
 from just_bash.fs.vfs import VirtualFs
 from just_bash.interpreter.arithmetic import eval_arith
 from just_bash.interpreter.conditionals import eval_conditional
@@ -48,6 +49,11 @@ from just_bash.interpreter.errors import (
 )
 from just_bash.interpreter.expansion import expand_pattern, expand_word, expand_word_no_split
 from just_bash.parser.parser import parse
+
+# The interpreter is FS-agnostic; both ``VirtualFs`` and ``OverlayFs`` implement
+# the same duck-typed interface (``read_file`` / ``write_file`` / ``listdir``
+# / ``stat`` / ``mkdir`` / ``rm`` / ``chdir`` / ``cwd`` / ``glob`` / ``walk``).
+FsLike = VirtualFs | OverlayFs
 
 
 @dataclass(slots=True)
@@ -75,7 +81,7 @@ class Interpreter:
     def __init__(
         self,
         *,
-        fs: VirtualFs | None = None,
+        fs: FsLike | None = None,
         env: Environment | None = None,
         commands: dict[str, CommandImpl] | None = None,
     ) -> None:
@@ -607,7 +613,7 @@ class _RedirectingStream(io.BytesIO):
 
 
 def run(
-    source: str, *, fs: VirtualFs | None = None, env: Environment | None = None, stdin: bytes = b""
+    source: str, *, fs: FsLike | None = None, env: Environment | None = None, stdin: bytes = b""
 ) -> ExecResult:
     """Parse and execute a script string. Returns captured stdout/stderr/exit."""
     script = parse(source)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from just_bash.fs.vfs import FsError
 
@@ -55,16 +55,32 @@ def parse_flags(
     *,
     boolean: set[str] | None = None,
     valued: set[str] | None = None,
-) -> tuple[dict[str, str | bool], list[str]]:
+    multi: set[str] | None = None,
+) -> tuple[dict[str, Any], list[str]]:
     """Tiny ad-hoc flag parser tailored for the command surface we ship.
 
     Returns ``(flags, positional)``. ``--`` ends flag parsing; bare ``-`` is
     positional (means stdin). Combined short flags (``-rn``) are split.
+
+    Flags listed in ``multi`` may appear multiple times; their values are
+    collected into a ``list[str]`` instead of being overwritten.
     """
     boolean = boolean or set()
     valued = valued or set()
-    flags: dict[str, str | bool] = {}
+    multi = multi or set()
+    flags: dict[str, Any] = {}
     pos: list[str] = []
+
+    def _store(key: str, value: str) -> None:
+        if key in multi:
+            existing = flags.get(key)
+            if isinstance(existing, list):
+                existing.append(value)
+            else:
+                flags[key] = [value]
+        else:
+            flags[key] = value
+
     i = 1  # skip argv[0] = command name
     while i < len(argv):
         a = argv[i]
@@ -79,12 +95,12 @@ def parse_flags(
             name, _, value = a.partition("=")
             if name in valued:
                 if value:
-                    flags[name] = value
+                    _store(name, value)
                     i += 1
                     continue
                 if i + 1 >= len(argv):
                     raise ValueError(f"option {name} requires a value")
-                flags[name] = argv[i + 1]
+                _store(name, argv[i + 1])
                 i += 2
                 continue
             if name in boolean:
@@ -105,7 +121,7 @@ def parse_flags(
                         raise ValueError(f"option {short} requires a value")
                     value = argv[i + 1]
                     i += 1
-                flags[short] = value
+                _store(short, value)
                 j = len(rest)
                 continue
             if short in boolean:

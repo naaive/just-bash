@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from just_bash.commands._helpers import parse_flags, read_input, write_err, write_out
+from just_bash.fs.vfs import FsError
 
 if TYPE_CHECKING:
     from just_bash.interpreter.interpreter import IO, Interpreter
@@ -59,15 +60,23 @@ def cmd_sed(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
             argv,
             boolean={"-n", "-E", "-r", "-i"},
             valued={"-e", "-f"},
+            multi={"-e", "-f"},
         )
     except ValueError as e:
         write_err(io_ctx, f"sed: {e}\n")
         return 2
     program_parts: list[str] = []
     if "-e" in flags:
-        program_parts.append(str(flags["-e"]))
+        e_val = flags["-e"]
+        if isinstance(e_val, list):
+            program_parts.extend(e_val)
+        else:
+            program_parts.append(str(e_val))
     if "-f" in flags:
-        program_parts.append(interp.fs.read_text(str(flags["-f"])))
+        f_val = flags["-f"]
+        f_paths = f_val if isinstance(f_val, list) else [str(f_val)]
+        for f in f_paths:
+            program_parts.append(interp.fs.read_text(f))
     if program_parts:
         files = positional
     else:
@@ -79,14 +88,43 @@ def cmd_sed(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
     program = "\n".join(program_parts)
     quiet = bool(flags.get("-n"))
     extended = bool(flags.get("-E") or flags.get("-r"))
+    in_place = bool(flags.get("-i"))
     ops, error = _compile(program, extended=extended)
     if error is not None:
         write_err(io_ctx, f"sed: {error}\n".encode())
         return 2
+    if in_place:
+        if not files:
+            write_err(io_ctx, b"sed: -i requires file operands\n")
+            return 2
+        rc = 0
+        for f in files:
+            try:
+                file_data = interp.fs.read_text(f)
+            except FsError as e:
+                write_err(io_ctx, f"sed: {e}\n")
+                rc = 1
+                continue
+            new_text = _apply_program(ops, file_data, quiet)
+            try:
+                interp.fs.write_file(f, new_text)
+            except FsError as e:
+                write_err(io_ctx, f"sed: {e}\n")
+                rc = 1
+        return rc
     data, rc = read_input(interp, io_ctx, files)
     text = data.decode("utf-8", errors="replace")
+    new_text = _apply_program(ops, text, quiet)
+    if new_text:
+        write_out(io_ctx, new_text)
+    return rc
+
+
+def _apply_program(ops: list[SedOp], text: str, quiet: bool) -> str:
+    """Run the compiled sed program on a full text blob; return new text."""
     lines = text.split("\n")
-    if text.endswith("\n"):
+    trailing = text.endswith("\n")
+    if trailing:
         lines = lines[:-1]
     output: list[str] = []
     state = SedState()
@@ -103,9 +141,9 @@ def cmd_sed(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
             output.extend(state.appended)
         if state.quit:
             break
-    if output:
-        write_out(io_ctx, "\n".join(output) + "\n")
-    return rc
+    if not output:
+        return ""
+    return "\n".join(output) + "\n"
 
 
 # ---------------------------------------------------------------------------

@@ -43,13 +43,14 @@ def cmd_grep(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
                 "-R",
                 "-E",
                 "-F",
+                "-P",
                 "-w",
                 "-x",
                 "-q",
                 "-s",
                 "-o",
             },
-            valued={"-e", "-f"},
+            valued={"-e", "-f", "-A", "-B", "-C"},
         )
     except ValueError as e:
         write_err(io_ctx, f"grep: {e}\n")
@@ -66,8 +67,14 @@ def cmd_grep(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
         write_err(io_ctx, b"grep: missing pattern\n")
         return 2
     fixed = bool(flags.get("-F"))
+    extended = bool(flags.get("-E") or flags.get("-P"))
     if fixed:
         pattern = re.escape(pattern)
+    elif not extended:
+        # Plain ``grep`` is BRE: ``\(``/``\)``/``\|``/``\+``/``\?``/``\{`` are
+        # the metacharacters; bare ``+``/``?``/etc. are literal. Translate to
+        # Python ``re`` (which is ERE/Perl flavour).
+        pattern = _bre_to_python(pattern)
     if flags.get("-w"):
         pattern = r"\b(?:" + pattern + r")\b"
     if flags.get("-x"):
@@ -122,38 +129,101 @@ def cmd_grep(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
                         write_err(io_ctx, f"grep: {e}\n")
         if len(targets) > 1:
             show_filename = not flags.get("-h")
+    only_matching = bool(flags.get("-o"))
+    after = int(flags.get("-A", flags.get("-C", 0)) or 0)
+    before = int(flags.get("-B", flags.get("-C", 0)) or 0)
     any_match = False
     for label, content in targets:
         lines = content.splitlines()
-        matched_lines: list[tuple[int, str]] = []
+        matched_idx: list[int] = []
+        match_objs: dict[int, re.Match[str]] = {}
         for i, line in enumerate(lines, 1):
             m = rx.search(line)
             if (m is not None) ^ invert:
-                matched_lines.append((i, line))
-        if matched_lines:
+                matched_idx.append(i)
+                if m is not None:
+                    match_objs[i] = m
+        if matched_idx:
             any_match = True
         if quiet:
             continue
         if list_files:
-            if matched_lines:
+            if matched_idx:
                 write_out(io_ctx, label + "\n")
             continue
         if count_only:
             prefix = f"{label}:" if show_filename else ""
-            write_out(io_ctx, f"{prefix}{len(matched_lines)}\n")
+            write_out(io_ctx, f"{prefix}{len(matched_idx)}\n")
             continue
-        for lineno, line in matched_lines:
+        # ``-o`` mode: print every non-overlapping match on its own line.
+        if only_matching:
+            for i, line in enumerate(lines, 1):
+                for m in rx.finditer(line):
+                    prefix_parts: list[str] = []
+                    if show_filename:
+                        prefix_parts.append(label)
+                    if show_lineno:
+                        prefix_parts.append(str(i))
+                    prefix = ":".join(prefix_parts)
+                    if prefix:
+                        write_out(io_ctx, prefix + ":" + m.group(0) + "\n")
+                    else:
+                        write_out(io_ctx, m.group(0) + "\n")
+            continue
+        # Compute the union of context windows around matched lines.
+        emit_set: set[int] = set()
+        for idx in matched_idx:
+            for j in range(max(1, idx - before), min(len(lines), idx + after) + 1):
+                emit_set.add(j)
+        prev_emitted = 0
+        for i, line in enumerate(lines, 1):
+            if i not in emit_set:
+                continue
+            sep = "-" if i not in match_objs else ":"
+            if (after or before) and prev_emitted and i - prev_emitted > 1:
+                write_out(io_ctx, "--\n")
+            prev_emitted = i
             prefix_parts: list[str] = []
             if show_filename:
                 prefix_parts.append(label)
             if show_lineno:
-                prefix_parts.append(str(lineno))
-            prefix = ":".join(prefix_parts)
+                prefix_parts.append(str(i))
+            prefix = sep.join(prefix_parts) if (after or before) else ":".join(prefix_parts)
             if prefix:
-                write_out(io_ctx, prefix + ":" + line + "\n")
+                write_out(io_ctx, prefix + sep + line + "\n")
             else:
                 write_out(io_ctx, line + "\n")
     return 0 if any_match else 1
+
+
+def _bre_to_python(pat: str) -> str:
+    """Translate ``grep`` BRE (default) into Python regex.
+
+    In BRE: ``\\(``/``\\)``/``\\|``/``\\+``/``\\?``/``\\{`` are metacharacters,
+    while bare ``(``/``)``/``|``/``+``/``?``/``{`` are literal. Python ``re``
+    uses the opposite convention.
+    """
+    out: list[str] = []
+    i = 0
+    while i < len(pat):
+        ch = pat[i]
+        if ch == "\\" and i + 1 < len(pat):
+            nxt = pat[i + 1]
+            if nxt in "(){}|+?":
+                out.append(nxt)
+                i += 2
+                continue
+            out.append(ch)
+            out.append(nxt)
+            i += 2
+            continue
+        if ch in "(){}|+?":
+            out.append("\\" + ch)
+            i += 1
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
 
 
 __all__ = ["cmd_grep"]

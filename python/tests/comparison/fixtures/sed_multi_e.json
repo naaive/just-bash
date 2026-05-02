@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf 'a\\nb\\nc\\n' | sed -e 's/a/A/' -e 's/c/C/'",
+  "stderr": "",
+  "stdout": "A\nb\nC\n"
+}
