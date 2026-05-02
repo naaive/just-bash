@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "for x in apple banana cherry; do\n  case $x in\n    a*) echo \"A: $x\" ;;\n    b*|c*) echo \"BC: $x\" ;;\n    *) echo \"other\" ;;\n  esac\ndone",
+  "stderr": "",
+  "stdout": "A: apple\nBC: banana\nBC: cherry\n"
+}

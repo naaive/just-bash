@@ -454,7 +454,12 @@ class Parser:
             self._next()
             else_body = self._parse_compound_list_until({"fi"})
         self._consume(TokenKind.WORD, "fi")
-        return If(clauses=clauses, else_body=else_body, line=line)
+        return If(
+            clauses=clauses,
+            else_body=else_body,
+            line=line,
+            redirections=self._parse_trailing_redirections(),
+        )
 
     def _parse_compound_list_until(self, terminators: set[str]) -> list[Statement]:
         out: list[Statement] = []
@@ -508,7 +513,13 @@ class Parser:
         self._consume(TokenKind.WORD, "do")
         body = self._parse_compound_list_until({"done"})
         self._consume(TokenKind.WORD, "done")
-        return For(variable=variable, words=words, body=body, line=line)
+        return For(
+            variable=variable,
+            words=words,
+            body=body,
+            line=line,
+            redirections=self._parse_trailing_redirections(),
+        )
 
     # ------------------------------------------------------------ while/until
     def _parse_while(self) -> While:
@@ -524,7 +535,12 @@ class Parser:
         self._consume(TokenKind.WORD, "do")
         body = self._parse_compound_list_until({"done"})
         self._consume(TokenKind.WORD, "done")
-        return ctor(condition=condition, body=body, line=line)
+        return ctor(
+            condition=condition,
+            body=body,
+            line=line,
+            redirections=self._parse_trailing_redirections(),
+        )
 
     # ------------------------------------------------------------------- case
     def _parse_case(self) -> Case:
@@ -549,7 +565,12 @@ class Parser:
                 raise ParseError("unexpected EOF in case", tok)
             items.append(self._parse_case_item())
             self._skip_newlines()
-        return Case(word=word, items=items, line=line)
+        return Case(
+            word=word,
+            items=items,
+            line=line,
+            redirections=self._parse_trailing_redirections(),
+        )
 
     def _parse_case_item(self) -> CaseItem:
         # Optional leading (
@@ -596,7 +617,33 @@ class Parser:
         self._consume(TokenKind.OPERATOR, "(")
         body = self._parse_compound_list_until_close_paren()
         self._consume(TokenKind.OPERATOR, ")")
-        return Subshell(body=body, line=line)
+        return Subshell(body=body, line=line, redirections=self._parse_trailing_redirections())
+
+    def _parse_trailing_redirections(self) -> list[Redirection]:
+        """Collect redirections following a compound command (``) >file``, ``done >file``)."""
+        out: list[Redirection] = []
+        while True:
+            t = self._peek()
+            if t.kind is TokenKind.IO_NUMBER:
+                out.append(self._parse_redirection())
+                continue
+            if t.kind is TokenKind.OPERATOR and t.text in {
+                "<",
+                ">",
+                ">>",
+                ">|",
+                "<>",
+                "<<<",
+                "<<",
+                "<<-",
+                "&>",
+                "&>>",
+                ">&",
+                "<&",
+            }:
+                out.append(self._parse_redirection())
+                continue
+            return out
 
     def _parse_compound_list_until_close_paren(self) -> list[Statement]:
         out: list[Statement] = []
@@ -617,7 +664,7 @@ class Parser:
         self._consume(TokenKind.WORD, "{")
         body = self._parse_compound_list_until({"}"})
         self._consume(TokenKind.WORD, "}")
-        return Group(body=body, line=line)
+        return Group(body=body, line=line, redirections=self._parse_trailing_redirections())
 
     # ---------------------------------------------------------------- functions
     def _parse_function_keyword(self) -> FunctionDef:
@@ -744,7 +791,7 @@ class Parser:
 
 
 def _try_parse_assignment(tok: Token) -> Assignment | None:
-    """Detect ``NAME=VALUE`` / ``NAME+=VALUE`` shapes from a single word token."""
+    """Detect ``NAME=VALUE`` / ``NAME+=VALUE`` / ``NAME[KEY]=VALUE`` shapes."""
     text = tok.text
     if not text:
         return None
@@ -755,6 +802,25 @@ def _try_parse_assignment(tok: Token) -> Assignment | None:
         i += 1
     if i >= len(text):
         return None
+    subscript: str | None = None
+    if text[i] == "[":
+        # NAME[KEY]=value form. Find matching ].
+        depth = 1
+        j = i + 1
+        while j < len(text) and depth > 0:
+            if text[j] == "[":
+                depth += 1
+            elif text[j] == "]":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        if j >= len(text) or text[j] != "]":
+            return None
+        subscript = text[i + 1 : j]
+        i = j + 1
+        if i >= len(text):
+            return None
     append = False
     if text[i] == "+" and i + 1 < len(text) and text[i + 1] == "=":
         append = True
@@ -763,10 +829,13 @@ def _try_parse_assignment(tok: Token) -> Assignment | None:
         eq = i
     else:
         return None
-    name = text[:i]
+    name = text[: i if subscript is None else text.index("[")]
     value_text = text[eq + 1 :]
     value = parse_word(value_text, line=tok.line) if value_text else None
-    return Assignment(name=name, value=value, append=append, line=tok.line)
+    a = Assignment(name=name, value=value, append=append, line=tok.line)
+    if subscript is not None:
+        a.subscript = subscript
+    return a
 
 
 def parse(source: str) -> Script:

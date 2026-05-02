@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf \"%s\\n\" \"a b c\" \"d e\" | wc -l -w -c",
+  "stderr": "",
+  "stdout": "      2       5      10\n"
+}

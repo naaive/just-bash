@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf \"%s\\n\" 3 11 2 22 1 | sort -n",
+  "stderr": "",
+  "stdout": "1\n2\n3\n11\n22\n"
+}

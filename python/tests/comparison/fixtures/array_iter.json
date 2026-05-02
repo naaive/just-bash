@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "arr=(\"hi there\" world)\nfor x in \"${arr[@]}\"; do\n  echo \"<$x>\"\ndone",
+  "stderr": "",
+  "stdout": "<hi there>\n<world>\n"
+}

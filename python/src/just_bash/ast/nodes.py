@@ -90,6 +90,19 @@ class TildeExpansion(Node):
 
 
 @dataclass(slots=True)
+class ProcessSubstitution(Node):
+    """``<(cmd)`` or ``>(cmd)``.
+
+    ``direction == "input"`` for ``<(cmd)`` (run cmd, expose its stdout as a
+    pseudo-file path); ``"output"`` for ``>(cmd)`` (the path becomes the
+    target of writes that are then fed to cmd's stdin).
+    """
+
+    body: Script = field(default_factory=lambda: Script())
+    direction: LiteralT["input", "output"] = "input"
+
+
+@dataclass(slots=True)
 class Glob(Node):
     """Pathname pattern expanded during pathname expansion."""
 
@@ -132,6 +145,7 @@ WordPart = (
     | CommandSubstitution
     | ArithmeticExpansion
     | TildeExpansion
+    | ProcessSubstitution
     | BraceExpansion
     | Glob
 )
@@ -376,6 +390,8 @@ class Assignment(Node):
     value: Word | None = None
     append: bool = False
     array: list[Word] | None = None
+    # ``arr[key]=value`` form: raw subscript text. Resolved at runtime.
+    subscript: str | None = None
 
 
 # ---------------------------------------------------------------------------

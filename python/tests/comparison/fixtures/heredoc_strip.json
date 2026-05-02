@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "cat <<-END\n\tfirst\n\tsecond\n\tEND\n",
+  "stderr": "",
+  "stdout": "first\nsecond\n"
+}

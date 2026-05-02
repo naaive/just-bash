@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "i=5; echo $((i++)); echo $i",
+  "stderr": "",
+  "stdout": "5\n6\n"
+}

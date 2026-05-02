@@ -173,6 +173,11 @@ class Lexer:
             tok = Token(TokenKind.OPERATOR, "<<", line, col)
             self._read_heredoc_delimiter_into(tok)
             return tok
+        # Process substitution: ``<(cmd)`` / ``>(cmd)``. Capture the whole
+        # ``<(...)`` as a single WORD token so the word parser can later
+        # decode it as a process-substitution part.
+        if (ch == "<" or ch == ">") and self._peek_char(1) == "(":
+            return self._read_process_sub_token(line, col)
         # Operators (longest match wins).
         for op in _THREE_CHAR_OPS:
             if self._starts_with(op):
@@ -202,6 +207,18 @@ class Lexer:
         # Word.
         text = self._read_word()
         return Token(TokenKind.WORD, text, line, col)
+
+    def _read_process_sub_token(self, line: int, col: int) -> Token:
+        """Capture ``<(cmds)`` or ``>(cmds)`` as a single WORD token.
+
+        Returning a WORD lets the word parser turn it into a
+        ``ProcessSubstitution`` node next to other word parts (so things like
+        ``cat <(cmd) suffix`` still work).
+        """
+        direction = self._peek_char()
+        self._advance()  # < or >
+        body = self._read_balanced("(", ")")
+        return Token(TokenKind.WORD, direction + body, line, col)
 
     # ------------------------------------------------------------- heredocs
     def _read_heredoc_delimiter_into(self, tok: Token) -> None:

@@ -126,17 +126,18 @@ def cmd_tr(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
         else:
             data = "".join(c for c in data if c not in set1)
     else:
-        # Build translation table.
-        if not set2 and not delete:
+        # Build translation table - missing set2 is fine when ``-s`` is set
+        # (we only squeeze, no translation).
+        if not set2 and not delete and not squeeze:
             write_err(io_ctx, b"tr: missing operand\n")
             return 1
-        if len(set2) < len(set1):
+        if set2 and len(set2) < len(set1):
             set2 += set2[-1] * (len(set1) - len(set2))
         if complement:
             mapping: dict[str, str] = {}
             target = set2[0] if set2 else ""
             data = "".join(target if c not in set1 else c for c in data)
-        else:
+        elif set2:
             mapping = dict(zip(set1, set2, strict=False))
             data = "".join(mapping.get(c, c) for c in data)
     if squeeze:

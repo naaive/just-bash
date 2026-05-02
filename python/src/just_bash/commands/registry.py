@@ -12,6 +12,7 @@ from just_bash.commands import (
     extra,
     find_cmd,
     grep_cmd,
+    more,
     sed_cmd,
     text_utils,
 )
@@ -72,6 +73,22 @@ def default_registry() -> dict[str, CommandImpl]:
         "realpath": extra.cmd_realpath,
         "stat": extra.cmd_stat,
         "xargs": extra.cmd_xargs,
+        # phase-3 extras
+        "base64": more.cmd_base64,
+        "hexdump": more.cmd_hexdump,
+        "xxd": more.cmd_xxd,
+        "column": more.cmd_column,
+        "shuf": more.cmd_shuf,
+        "tac": more.cmd_tac,
+        "split": more.cmd_split,
+        "join": more.cmd_join,
+        "hostname": more.cmd_hostname,
+        "whoami": more.cmd_whoami,
+        "id": more.cmd_id,
+        "uname": more.cmd_uname,
+        "getent": more.cmd_getent,
+        "file": more.cmd_file,
+        "jq": more.cmd_jq,
     }
 
 

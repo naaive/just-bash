@@ -45,6 +45,18 @@ def parse_word(raw: str, line: int = 0, *, allow_tilde: bool = True) -> Word:
     i = 0
     n = len(raw)
     started = True  # tracks word-start position for tilde expansion
+    # Process substitution: ``<(cmd)`` or ``>(cmd)`` - the lexer emits these
+    # as a WORD whose first character is ``<`` or ``>``.
+    if n >= 3 and raw[0] in ("<", ">") and raw[1] == "(" and raw[-1] == ")":
+        from just_bash.parser.parser import parse as _parse_script
+
+        inner = raw[2:-1]
+        body = _parse_script(inner)
+        from just_bash.ast.nodes import ProcessSubstitution
+
+        direction: str = "input" if raw[0] == "<" else "output"
+        parts.append(ProcessSubstitution(line=line, body=body, direction=direction))  # type: ignore[arg-type]
+        return Word(line=line, parts=parts)
     while i < n:
         ch = raw[i]
         if ch == "\\" and i + 1 < n:

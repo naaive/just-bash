@@ -52,6 +52,9 @@ class Environment:
         self.last_exit: int = 0
         self.last_pipeline_status: list[int] = []
         self.shell_options: set[str] = set()
+        # Trap handlers, keyed by signal name (``EXIT``, ``ERR``, ``INT``, ...).
+        # ``""`` value disables the trap; absence means default behavior.
+        self.traps: dict[str, str] = {}
         if initial_env:
             for k, v in initial_env.items():
                 self.set_var(k, v, exported=True)
@@ -134,15 +137,73 @@ class Environment:
         self, name: str, values: list[str], *, exported: bool = False, local: bool = False
     ) -> None:
         scope = self._scopes[-1] if local else self.global_scope
+        existing = scope.vars.get(name)
+        # If the variable was previously declared associative, treat the words
+        # as ``key=value`` assignments (matches ``declare -A m; m=(a 1 b 2)``).
+        if existing is not None and existing.assoc is not None:
+            assoc: dict[str, str] = {}
+            for v in values:
+                if "=" in v:
+                    k, _, val = v.partition("=")
+                    assoc[k] = val
+            existing.assoc = assoc
+            existing.value = ""
+            existing.exported = existing.exported or exported
+            return
         scope.vars[name] = Variable(
             value=values[0] if values else "", array=list(values), exported=exported
         )
+
+    def declare_assoc(self, name: str, *, exported: bool = False, local: bool = False) -> None:
+        """Mark ``name`` as an associative array (``declare -A``)."""
+        scope = self._scopes[-1] if local else self.global_scope
+        existing = scope.vars.get(name)
+        if existing is not None:
+            if existing.assoc is None:
+                existing.assoc = {}
+            existing.exported = existing.exported or exported
+            return
+        scope.vars[name] = Variable(value="", assoc={}, exported=exported)
+
+    def set_assoc_element(self, name: str, key: str, value: str) -> None:
+        """Set ``arr[key] = value`` for an associative array."""
+        v = self._lookup(name)
+        if v is None:
+            self.global_scope.vars[name] = Variable(value="", assoc={key: value})
+            return
+        if v.assoc is None:
+            v.assoc = {}
+        v.assoc[key] = value
+
+    def set_array_element(self, name: str, index: int, value: str) -> None:
+        """Set ``arr[index] = value`` for an indexed array (auto-extends)."""
+        v = self._lookup(name)
+        if v is None:
+            arr = [""] * index + [value]
+            self.global_scope.vars[name] = Variable(value=value if index == 0 else "", array=arr)
+            return
+        if v.assoc is not None:
+            v.assoc[str(index)] = value
+            return
+        if v.array is None:
+            v.array = [v.value]
+        while len(v.array) <= index:
+            v.array.append("")
+        v.array[index] = value
+        if index == 0:
+            v.value = value
 
     def get_array(self, name: str) -> list[str] | None:
         v = self._lookup(name)
         if v is None:
             return None
         return v.array
+
+    def get_assoc(self, name: str) -> dict[str, str] | None:
+        v = self._lookup(name)
+        if v is None:
+            return None
+        return v.assoc
 
     def unset(self, name: str) -> None:
         for scope in reversed(self._scopes):

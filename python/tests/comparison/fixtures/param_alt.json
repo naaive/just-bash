@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "x=hello; echo \"${x:+yes}\"; unset x; echo \"${x:+yes}\"",
+  "stderr": "",
+  "stdout": "yes\n\n"
+}

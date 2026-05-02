@@ -91,6 +91,10 @@ class Interpreter:
         from just_bash.interpreter.builtins import default_builtins
 
         self.builtins: dict[str, CommandImpl] = default_builtins()
+        # Counter for unique paths assigned to process-substitution outputs.
+        self._procsub_counter: int = 0
+        # Pending ``>(cmd)`` deferred execution targets, drained per pipeline.
+        self._pending_output_subs: list[tuple[str, Script]] = []
 
     # ---------------------------------------------------------------- script
     def run_script(self, script: Script) -> int:
@@ -109,11 +113,39 @@ class Interpreter:
                 self._run_statement(stmt, io_ctx)
         except ExitException as e:
             self.env.last_exit = e.code
+        finally:
+            self._fire_trap("EXIT", io_ctx)
         return ExecResult(
             stdout=io_ctx.stdout.getvalue().decode("utf-8", errors="replace"),
             stderr=io_ctx.stderr.getvalue().decode("utf-8", errors="replace"),
             exit_code=self.env.last_exit,
         )
+
+    def _fire_trap(self, signal_name: str, io_ctx: IO) -> None:
+        """Invoke the registered handler for ``signal_name`` if any.
+
+        The script's overall exit code is preserved across the handler so a
+        ``trap '...' EXIT`` cleanup doesn't stomp on a meaningful exit.
+        """
+        handler = self.env.traps.get(signal_name)
+        if not handler:
+            return
+        if signal_name == "EXIT":
+            self.env.traps.pop(signal_name, None)
+        from just_bash.parser.parser import parse
+
+        try:
+            sub = parse(handler)
+        except Exception:
+            return
+        saved_exit = self.env.last_exit
+        for stmt in sub.statements:
+            try:
+                self._run_statement(stmt, io_ctx)
+            except (ExitException, InterpreterError):
+                # Don't let a bad trap kill the outer flow.
+                break
+        self.env.last_exit = saved_exit
 
     def run_substitution(self, script: Script) -> str:
         """Run a script for ``$(...)`` and capture its stdout."""
@@ -140,10 +172,35 @@ class Interpreter:
                     continue
             last = self._run_pipeline(pipeline, io_ctx)
             # Update ``last_exit`` between pipelines so that ``$?`` in a later
-            # statement separator reads the most recent code, not the one from
-            # before this whole statement started.
+            # pipeline reads the most recent code.
             self.env.last_exit = last
+            self._drain_output_process_subs(io_ctx)
+            # ``set -e`` / ``ERR`` fire after each pipeline UNLESS the next
+            # operator is ``&&`` / ``||`` — in that case only the last
+            # element of the chain matters (matches bash semantics).
+            next_op = stmt.operators[i] if i < len(stmt.operators) else None
+            in_chain = next_op in ("&&", "||")
+            if last != 0 and not in_chain:
+                if "ERR" in self.env.traps:
+                    self._fire_trap("ERR", io_ctx)
+                if "e" in self.env.shell_options:
+                    raise ExitException(last)
         return last
+
+    def _drain_output_process_subs(self, io_ctx: IO) -> None:
+        """Feed any pending ``>(cmd)`` outputs to their target commands."""
+        pending = getattr(self, "_pending_output_subs", None)
+        if not pending:
+            return
+        self._pending_output_subs = []
+        for path, body in pending:
+            try:
+                data = self.fs.read_file(path)
+            except Exception:
+                continue
+            sub_io = IO(stdin=data, stdout=io_ctx.stdout, stderr=io_ctx.stderr)
+            for sub_stmt in body.statements:
+                self._run_statement(sub_stmt, sub_io)
 
     # ------------------------------------------------------------ pipelines
     def _run_pipeline(self, pipeline: Pipeline, io_ctx: IO) -> int:
@@ -351,6 +408,26 @@ class Interpreter:
             self.env.set_array(assn.name, values, exported=exported)
             return
         value = expand_word_no_split(self, assn.value) if assn.value is not None else ""
+        if assn.subscript is not None:
+            # ``arr[key]=value`` form. Decide assoc vs indexed by looking at
+            # the existing variable; default to indexed when the subscript is
+            # numeric.
+            existing = self.env.get_var(assn.name)
+            from just_bash.parser.word_parser import parse_word
+
+            sub_word = parse_word(assn.subscript, line=assn.line)
+            sub_text = expand_word_no_split(self, sub_word)
+            if existing is not None and existing.assoc is not None:
+                self.env.set_assoc_element(assn.name, sub_text, value)
+                return
+            try:
+                idx = int(sub_text)
+            except ValueError:
+                # Treat as associative if the key isn't numeric.
+                self.env.set_assoc_element(assn.name, sub_text, value)
+                return
+            self.env.set_array_element(assn.name, idx, value)
+            return
         try:
             self.env.set_var(assn.name, value, exported=exported, append=assn.append)
         except PermissionError as e:
@@ -461,6 +538,25 @@ class Interpreter:
         # 2>file - operator is ">" with fd=2.
         if op == ">" and r.fd == 2:
             io_ctx.stderr = _RedirectingStream(self, path, append=False)
+            return
+        # ``>&N`` / ``N>&M`` - duplicate / redirect by file-descriptor number.
+        if op == ">&":
+            src_fd = r.fd if r.fd is not None else 1
+            try:
+                dst_fd = int(path)
+            except ValueError:
+                # ``>&filename`` form (rare): treat as ``> filename``.
+                io_ctx.stdout = _RedirectingStream(self, path, append=False)
+                return
+            target_stream = io_ctx.stdout if dst_fd == 1 else io_ctx.stderr
+            if src_fd == 1:
+                io_ctx.stdout = target_stream
+            elif src_fd == 2:
+                io_ctx.stderr = target_stream
+            return
+        if op == "<&":
+            # ``N<&M`` - duplicate input fd. For our buffered model we only
+            # support ``<&-`` (close, no-op) and ``<&0`` (already stdin).
             return
         raise InterpreterError(f"unsupported redirection: {op}")
 

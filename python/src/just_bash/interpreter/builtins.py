@@ -56,6 +56,7 @@ def default_builtins() -> dict[str, Builtin]:
         "continue": _b_continue,
         "declare": _b_declare,
         "typeset": _b_declare,
+        "trap": _b_trap,
     }
 
 
@@ -528,17 +529,71 @@ def _b_let(interp: Interpreter, argv: list[str], _io: IO) -> int:
 def _b_declare(interp: Interpreter, argv: list[str], _io: IO) -> int:
     args = argv[1:]
     exported = False
-    while (args and args[0].startswith("-")) or (args and args[0].startswith("+")):
+    assoc = False
+    indexed = False
+    while args and (args[0].startswith(("-", "+"))) and args[0] not in ("-", "--"):
         flag = args[0]
-        if "x" in flag[1:] and flag.startswith("-"):
-            exported = True
+        if flag.startswith("-"):
+            if "x" in flag[1:]:
+                exported = True
+            if "A" in flag[1:]:
+                assoc = True
+            if "a" in flag[1:]:
+                indexed = True
+        args = args[1:]
+    if args and args[0] == "--":
         args = args[1:]
     for arg in args:
         if "=" in arg:
             name, _, value = arg.partition("=")
-            interp.env.set_var(name, value, exported=exported)
+            if assoc:
+                interp.env.declare_assoc(name, exported=exported)
+            elif indexed:
+                interp.env.set_array(name, [value], exported=exported)
+            else:
+                interp.env.set_var(name, value, exported=exported)
+        elif assoc:
+            interp.env.declare_assoc(arg, exported=exported)
+        elif indexed:
+            interp.env.set_array(arg, [], exported=exported)
         else:
             interp.env.set_var(arg, "", exported=exported)
+    return 0
+
+
+_VALID_SIGNALS = frozenset(
+    {"EXIT", "ERR", "DEBUG", "RETURN", "INT", "TERM", "HUP", "QUIT", "USR1", "USR2"}
+)
+
+
+def _b_trap(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
+    """``trap [HANDLER] SIGNAL...`` register / clear signal handlers.
+
+    Bash semantics: ``trap`` with no args lists current handlers; ``trap -``
+    or ``trap '' SIG`` clears (default vs ignore - we treat both as remove).
+    """
+    args = argv[1:]
+    if not args:
+        for sig, cmd in sorted(interp.env.traps.items()):
+            io_ctx.stdout.write(f"trap -- {cmd!r} {sig}\n".encode())
+        return 0
+    if args[0] == "-l":
+        io_ctx.stdout.write(b"EXIT ERR DEBUG RETURN INT TERM HUP QUIT USR1 USR2\n")
+        return 0
+    handler = args[0]
+    signals = args[1:]
+    if not signals:
+        io_ctx.stderr.write(b"trap: usage: trap [HANDLER] SIGNAL...\n")
+        return 2
+    for sig in signals:
+        sig_name = sig.upper().removeprefix("SIG")
+        if sig_name not in _VALID_SIGNALS:
+            io_ctx.stderr.write(f"trap: {sig}: invalid signal specification\n".encode())
+            return 1
+        if handler in ("-", ""):
+            interp.env.traps.pop(sig_name, None)
+        else:
+            interp.env.traps[sig_name] = handler
     return 0
 
 

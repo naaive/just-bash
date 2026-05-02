@@ -245,26 +245,36 @@ def cmd_wc(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
         n_lines = text.count("\n")
         n_words = len(text.split())
         n_bytes = len(data)
+        # Bash's wc widths: a single column reading from stdin is unpadded,
+        # otherwise pad to 7. (Real bash also bumps the width for very large
+        # counts; we match the common case which covers all everyday usage.)
+        active = sum(1 for f in (show_lines, show_words, show_bytes or show_chars) if f)
+        named = bool(label)
+        if active == 1 and not named:
+            width = len(str(max(n_lines, n_words, n_bytes)))
+        else:
+            width = max(7, len(str(max(n_lines, n_words, n_bytes))))
         cols: list[str] = []
         if show_lines:
-            cols.append(f"{n_lines:>7}")
+            cols.append(f"{n_lines:>{width}}")
         if show_words:
-            cols.append(f"{n_words:>7}")
+            cols.append(f"{n_words:>{width}}")
         if show_bytes or show_chars:
-            cols.append(f"{n_bytes:>7}")
-        write_out(io_ctx, "".join(cols) + label + "\n")
+            cols.append(f"{n_bytes:>{width}}")
+        write_out(io_ctx, " ".join(cols) + label + "\n")
         totals[0] += n_lines
         totals[1] += n_words
         totals[2] += n_bytes
     if len(targets) > 1:
+        width = max(7, len(str(max(totals))))
         cols = []
         if show_lines:
-            cols.append(f"{totals[0]:>7}")
+            cols.append(f"{totals[0]:>{width}}")
         if show_words:
-            cols.append(f"{totals[1]:>7}")
+            cols.append(f"{totals[1]:>{width}}")
         if show_bytes or show_chars:
-            cols.append(f"{totals[2]:>7}")
-        write_out(io_ctx, "".join(cols) + " total\n")
+            cols.append(f"{totals[2]:>{width}}")
+        write_out(io_ctx, " ".join(cols) + " total\n")
     return rc
 
 

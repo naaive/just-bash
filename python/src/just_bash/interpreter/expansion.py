@@ -36,6 +36,7 @@ from just_bash.ast.nodes import (
     ParameterExpansion,
     PatternRemoval,
     PatternReplacement,
+    ProcessSubstitution,
     SingleQuoted,
     Substring,
     TildeExpansion,
@@ -209,7 +210,26 @@ def _expand_part(interp: Interpreter, part: WordPart, *, force_quoted: bool) -> 
         if home is None:
             return [_Piece("~" + (part.user or ""), force_quoted)]
         return [_Piece(home, force_quoted)]
+    if isinstance(part, ProcessSubstitution):
+        return [_Piece(_expand_process_sub(interp, part), force_quoted)]
     raise InterpreterError(f"unsupported word part: {type(part).__name__}")
+
+
+def _expand_process_sub(interp: Interpreter, part: ProcessSubstitution) -> str:
+    """Materialize a ``<(cmd)`` / ``>(cmd)`` as a unique VFS path."""
+    interp.fs.mkdir("/dev/fd", parents=True, exist_ok=True)
+    interp._procsub_counter += 1  # noqa: SLF001
+    path = f"/dev/fd/{interp._procsub_counter}"  # noqa: SLF001
+    if part.direction == "input":
+        # Run the substitution and stash its stdout at ``path``.
+        output = interp.run_substitution(part.body)
+        interp.fs.write_file(path, output)
+        return path
+    # ``>(cmd)``: register a deferred sink; we track writes and feed the body
+    # command at the end of the surrounding statement.
+    interp.fs.write_file(path, b"")
+    interp._pending_output_subs.append((path, part.body))  # noqa: SLF001
+    return path
 
 
 def _expand_parameter_pieces(
@@ -220,7 +240,8 @@ def _expand_parameter_pieces(
     splat_form = part.subscript if part.subscript in ("@", "*") else part.parameter
     if is_at_star or part.array_keys:
         elements = _read_array_elements(interp, part)
-        if part.array_keys:
+        if part.array_keys and interp.env.get_assoc(part.parameter) is None:
+            # Indexed array (or scalar / positional): keys are 0..N-1.
             elements = [str(i) for i in range(len(elements))]
         if isinstance(part.operation, Length):
             return [_Piece(str(len(elements)), force_quoted)]
@@ -237,6 +258,11 @@ def _read_array_elements(interp: Interpreter, part: ParameterExpansion) -> list[
     name = part.parameter
     if name in ("@", "*"):
         return list(interp.env.positional)
+    assoc = interp.env.get_assoc(name)
+    if assoc is not None:
+        if part.array_keys:
+            return list(assoc.keys())
+        return list(assoc.values())
     arr = interp.env.get_array(name)
     if arr is not None:
         return list(arr)
@@ -249,23 +275,25 @@ def _read_array_elements(interp: Interpreter, part: ParameterExpansion) -> list[
 def _expand_parameter(interp: Interpreter, part: ParameterExpansion) -> str:
     name = part.parameter
     if part.subscript is not None and part.subscript not in ("@", "*"):
-        # Numeric index into an array: ${arr[3]} (subscript may be an
-        # arithmetic / parameter / command expansion, e.g. ${arr[$((i+1))]}).
-        from just_bash.interpreter.arithmetic import eval_arith
-        from just_bash.parser.arithmetic_parser import parse_arith_text
+        # Indexed or associative array access: ``${arr[key]}``.
         from just_bash.parser.word_parser import parse_word
 
-        # First expand the subscript text via the word machinery, then parse
-        # the result as an arithmetic expression.
         sub_word = parse_word(part.subscript, line=part.line)
         expanded = expand_word_no_split(interp, sub_word)
-        idx = eval_arith(interp, parse_arith_text(expanded.strip() or "0"))
-        arr = interp.env.get_array(name)
-        if arr is None:
-            scalar = interp.env.get(name) or ""
-            raw_value: str | None = scalar if idx == 0 else None
+        assoc = interp.env.get_assoc(name)
+        if assoc is not None:
+            raw_value: str | None = assoc.get(expanded)
         else:
-            raw_value = arr[idx] if 0 <= idx < len(arr) else None
+            from just_bash.interpreter.arithmetic import eval_arith
+            from just_bash.parser.arithmetic_parser import parse_arith_text
+
+            idx = eval_arith(interp, parse_arith_text(expanded.strip() or "0"))
+            arr = interp.env.get_array(name)
+            if arr is None:
+                scalar = interp.env.get(name) or ""
+                raw_value = scalar if idx == 0 else None
+            else:
+                raw_value = arr[idx] if 0 <= idx < len(arr) else None
     else:
         raw_value = _read_parameter(interp, name)
     op = part.operation
