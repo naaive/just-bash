@@ -58,6 +58,10 @@ class Environment:
         # Trap handlers, keyed by signal name (``EXIT``, ``ERR``, ``INT``, ...).
         # ``""`` value disables the trap; absence means default behavior.
         self.traps: dict[str, str] = {}
+        # Function call stack for FUNCNAME / BASH_SOURCE / BASH_LINENO. Each
+        # entry is ``(function_name, defining_line)`` and is pushed/popped by
+        # the interpreter around function calls.
+        self.call_stack: list[tuple[str, int]] = []
         # Approximation of ``$SECONDS`` - we record the wall-clock origin and
         # read it on demand. ``$RANDOM`` reads from a deterministic generator
         # (seeded from ``$RANDOM`` writes when set).

@@ -151,7 +151,9 @@ class Lexer:
         if ch == "(" and self._peek_char(1) == "(":
             return self._read_arith_command_token(line, col)
         # [[ ... ]] - conditional expression keyword. Two-char keyword.
-        if ch == "[" and self._peek_char(1) == "[":
+        # Skip when ``[[`` is immediately followed by ``:`` because that's a
+        # POSIX char class like ``[[:space:]]`` and belongs in a glob word.
+        if ch == "[" and self._peek_char(1) == "[" and self._peek_char(2) != ":":
             self._advance()
             self._advance()
             return Token(TokenKind.WORD, "[[", line, col)

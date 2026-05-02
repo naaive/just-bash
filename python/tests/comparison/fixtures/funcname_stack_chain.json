@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "inner() {\n  echo \"FUNCNAME=${FUNCNAME[*]}\"\n  echo \"depth=${#FUNCNAME[@]}\"\n}\nmiddle() { inner; }\nouter() { middle; }\nouter\necho \"top depth=${#FUNCNAME[@]}\"",
+  "stderr": "",
+  "stdout": "FUNCNAME=inner middle outer\ndepth=3\ntop depth=0\n"
+}

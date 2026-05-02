@@ -86,11 +86,9 @@ class _Parser:
         start = self.pos
         self.pos += 1  # consume [
         body: list[str] = ["["]
-        if self.pos < len(self.text) and self.text[self.pos] == "!":
+        if self.pos < len(self.text) and self.text[self.pos] in ("!", "^"):
+            # Both ``!`` and ``^`` negate the class in bash globs.
             body.append("^")
-            self.pos += 1
-        elif self.pos < len(self.text) and self.text[self.pos] == "^":
-            body.append("\\^")  # literal caret unless we're inverting
             self.pos += 1
         while self.pos < len(self.text) and self.text[self.pos] != "]":
             ch = self.text[self.pos]
@@ -98,6 +96,14 @@ class _Parser:
                 body.append(re.escape(self.text[self.pos + 1]))
                 self.pos += 2
                 continue
+            # POSIX character class [:NAME:] — translate to a Python equivalent.
+            if ch == "[" and self.pos + 1 < len(self.text) and self.text[self.pos + 1] == ":":
+                end = self.text.find(":]", self.pos + 2)
+                if end != -1:
+                    name = self.text[self.pos + 2 : end]
+                    body.append(_POSIX_CLASSES.get(name, ""))
+                    self.pos = end + 2
+                    continue
             if ch in ("\\", "]"):
                 body.append("\\" + ch)
             else:
@@ -170,6 +176,26 @@ class _Parser:
                 alts[-1].append(inner)
                 self.pos = sub.pos
         return ["".join(a) for a in alts]
+
+
+# POSIX character-class names mapped to ASCII char ranges suitable for
+# inclusion inside a Python ``[...]`` set.
+_POSIX_CLASSES: dict[str, str] = {
+    "alpha": "a-zA-Z",
+    "alnum": "a-zA-Z0-9",
+    "digit": "0-9",
+    "lower": "a-z",
+    "upper": "A-Z",
+    "space": " \\t\\n\\r\\f\\v",
+    "blank": " \\t",
+    "xdigit": "0-9a-fA-F",
+    "cntrl": "\\x00-\\x1f\\x7f",
+    "print": "\\x20-\\x7e",
+    "graph": "\\x21-\\x7e",
+    "punct": "!-/:-@\\[-`{-~",
+    "ascii": "\\x00-\\x7f",
+    "word": "a-zA-Z0-9_",
+}
 
 
 __all__ = ["extglob_match", "extglob_to_regex"]

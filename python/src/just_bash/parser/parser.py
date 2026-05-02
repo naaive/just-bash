@@ -906,6 +906,16 @@ class Parser:
             nxt.kind is TokenKind.OPERATOR and nxt.text in {"<", ">"}
         ):
             op_tok = self._next()
+            if op_tok.text == "=~":
+                # The regex RHS may contain ``(`` ``)`` ``|`` etc. that the
+                # lexer has split into separate tokens. Glue everything up to
+                # the next conditional terminator back into a single regex.
+                right_text = self._collect_regex_rhs()
+                return CondBinary(
+                    operator=op_tok.text,
+                    left=parse_word(first.text, line=first.line),
+                    right=parse_word(right_text, line=op_tok.line),
+                )
             right_tok = self._next()
             if right_tok.kind is not TokenKind.WORD:
                 raise ParseError("expected right operand", right_tok)
@@ -916,6 +926,35 @@ class Parser:
             )
         # Single word: truthy if non-empty.
         return CondUnary(operator="-n", operand=parse_word(first.text, line=first.line))
+
+    def _collect_regex_rhs(self) -> str:
+        """Glue tokens together until a conditional terminator is reached.
+
+        ``[[ s =~ a(b)c ]]`` lexes into ``a`` ``(`` ``b`` ``)`` ``c`` — we
+        re-join them so the regex engine receives the original POSIX ERE.
+        Stops at ``]]``, ``&&``, ``||`` (at cond depth 0), or a closing
+        ``)`` that matches an unbalanced opener.
+        """
+        parts: list[str] = []
+        paren_depth = 0
+        while True:
+            tok = self._peek()
+            text = tok.text
+            if tok.kind is TokenKind.WORD and text == "]]" and paren_depth == 0:
+                break
+            if tok.kind is TokenKind.OPERATOR and text in ("&&", "||") and paren_depth == 0:
+                break
+            if tok.kind is TokenKind.OPERATOR and text == ")" and paren_depth == 0:
+                break
+            if tok.kind is TokenKind.OPERATOR and text == "(":
+                paren_depth += 1
+            elif tok.kind is TokenKind.OPERATOR and text == ")":
+                paren_depth -= 1
+            parts.append(text)
+            self._next()
+        if not parts:
+            raise ParseError("expected regex after =~", self._peek())
+        return "".join(parts)
 
 
 # ---------------------------------------------------------------------------

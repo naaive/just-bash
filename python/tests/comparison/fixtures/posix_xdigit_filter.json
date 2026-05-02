@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "for ch in 9 a F z; do\n  case \"$ch\" in\n    [[:xdigit:]]) echo \"$ch hex\" ;;\n    *) echo \"$ch no\" ;;\n  esac\ndone",
+  "stderr": "",
+  "stdout": "9 hex\na hex\nF hex\nz no\n"
+}

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "function bye() {\n  echo \"bye $1\"\n}\nbye bob",
+  "stderr": "",
+  "stdout": "bye bob\n"
+}

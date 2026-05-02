@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "v=hello123\n[[ \"$v\" == *[[:digit:]]* ]] && echo \"has digit\"\n[[ \"abc\" == *[[:digit:]]* ]] || echo \"no digit\"",
+  "stderr": "",
+  "stdout": "has digit\nno digit\n"
+}

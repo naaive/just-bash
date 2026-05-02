@@ -333,7 +333,10 @@ class Interpreter:
         for item in node.items:
             for pattern_word in item.patterns:
                 pattern = expand_pattern(self, pattern_word)
-                if any(c in pattern for c in "@?+*!") and "(" in pattern:
+                use_extglob = ("[:" in pattern) or (
+                    any(c in pattern for c in "@?+*!") and "(" in pattern
+                )
+                if use_extglob:
                     if extglob_match(target, pattern):
                         return self._exec_block(item.body, io_ctx)
                 elif _fn.fnmatchcase(target, pattern):
@@ -514,6 +517,10 @@ class Interpreter:
         saved = list(self.env.positional)
         self.env.positional = args
         self.env.push_scope()
+        # Push the call frame onto the bash debug arrays. ``FUNCNAME`` lists
+        # the active functions inner-first; ``BASH_SOURCE`` parallel-tracks
+        # the source for each frame; ``BASH_LINENO`` records caller lines.
+        self.env.call_stack.append((defn.name, defn.line))
         try:
             if defn.body is None:
                 return 0
@@ -521,6 +528,7 @@ class Interpreter:
         except ReturnException as e:
             return e.code
         finally:
+            self.env.call_stack.pop()
             self.env.pop_scope()
             self.env.positional = saved
 

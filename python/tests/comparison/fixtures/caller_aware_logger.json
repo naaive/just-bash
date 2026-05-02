@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "log() {\n  local caller=${FUNCNAME[1]:-main}\n  echo \"[$caller] $*\"\n}\nworker() {\n  log \"doing work\"\n}\nworker\nlog \"from top level\"",
+  "stderr": "",
+  "stdout": "[worker] doing work\n[main] from top level\n"
+}

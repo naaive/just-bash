@@ -297,6 +297,15 @@ def _read_array_elements(interp: Interpreter, part: ParameterExpansion) -> list[
         return list(interp.env.positional)
     if name == "PIPESTATUS":
         return [str(s) for s in interp.env.last_pipeline_status]
+    if name == "FUNCNAME":
+        # Innermost-first list of executing function names. ``bash -c`` does
+        # NOT append a synthetic ``main`` frame — only ``bash script.sh``
+        # does — and our harness uses ``-c`` so we follow that convention.
+        return [n for n, _ in reversed(interp.env.call_stack)]
+    if name == "BASH_SOURCE":
+        return ["main"] * len(interp.env.call_stack)
+    if name == "BASH_LINENO":
+        return [str(line) for _, line in reversed(interp.env.call_stack)]
     assoc = interp.env.get_assoc(name)
     if assoc is not None:
         if part.array_keys:
@@ -334,6 +343,16 @@ def _expand_parameter(interp: Interpreter, part: ParameterExpansion) -> str:
             from just_bash.parser.arithmetic_parser import parse_arith_text
 
             idx = eval_arith(interp, parse_arith_text(expanded.strip() or "0"))
+            # Synthetic introspection arrays (FUNCNAME / BASH_SOURCE /
+            # BASH_LINENO) are read straight off the call stack.
+            if name in ("FUNCNAME", "BASH_SOURCE", "BASH_LINENO"):
+                synth = _read_array_elements(
+                    interp, ParameterExpansion(parameter=name, line=part.line)
+                )
+                raw_value = synth[idx] if 0 <= idx < len(synth) else None
+                # Skip the assoc/array branches below; jump to operator
+                # processing (which already handles unset / default / etc.).
+                return _apply_param_operator(interp, part, raw_value, name)
             arr = interp.env.get_array(name)
             if arr is None:
                 scalar = interp.env.get(name) or ""
@@ -342,6 +361,15 @@ def _expand_parameter(interp: Interpreter, part: ParameterExpansion) -> str:
                 raw_value = arr[idx] if 0 <= idx < len(arr) else None
     else:
         raw_value = _read_parameter(interp, name)
+    return _apply_param_operator(interp, part, raw_value, name)
+
+
+def _apply_param_operator(
+    interp: Interpreter,
+    part: ParameterExpansion,
+    raw_value: str | None,
+    name: str,
+) -> str:
     op = part.operation
     if op is None:
         return raw_value or ""
@@ -435,15 +463,14 @@ def _case_modify(s: str, *, direction: str, all_chars: bool, pattern: str | None
 def _transform(s: str, op: str) -> str:
     """Apply ``${VAR@op}`` transformation.
 
-    ``Q`` shell-quotes the value, ``E`` interprets backslash escapes,
-    ``U``/``L``/``u`` change case, ``A`` returns an attribute-recreate
-    snippet, ``P`` expands as a prompt (degenerate here). Unsupported
+    ``Q`` shell-quotes the value (bash's single-quote style), ``E``
+    interprets backslash escapes, ``U``/``L``/``u`` change case,
+    ``A`` returns a ``declare`` statement that recreates the variable,
+    ``P`` would expand as a PS1-style prompt (degenerate here). Unsupported
     operators return the value unchanged.
     """
     if op == "Q":
-        import shlex
-
-        return shlex.quote(s)
+        return _bash_quote_q(s)
     if op == "E":
         # ``$'...'``-style escape interpretation.
         out: list[str] = []
@@ -469,6 +496,37 @@ def _transform(s: str, op: str) -> str:
     return s
 
 
+def _bash_quote_q(s: str) -> str:
+    """Match bash's ``${var@Q}`` single-quote style.
+
+    Empty -> ``''``; control chars -> ``$'…'``; otherwise always wraps in
+    ``'…'`` with embedded ``'`` escaped as ``'\\''`` (bash always quotes
+    even safe identifiers, unlike ``printf %q``).
+    """
+    if s == "":
+        return "''"
+    if any(c < " " for c in s):
+        out: list[str] = ["$'"]
+        for c in s:
+            if c == "\n":
+                out.append("\\n")
+            elif c == "\t":
+                out.append("\\t")
+            elif c == "\r":
+                out.append("\\r")
+            elif c == "\\":
+                out.append("\\\\")
+            elif c == "'":
+                out.append("\\'")
+            elif c < " ":
+                out.append(f"\\x{ord(c):02x}")
+            else:
+                out.append(c)
+        out.append("'")
+        return "".join(out)
+    return "'" + s.replace("'", "'\\''") + "'"
+
+
 def _read_parameter(interp: Interpreter, name: str) -> str | None:
     """Resolve a parameter name to its current value (or ``None`` if unset)."""
     if name == "?":
@@ -481,6 +539,12 @@ def _read_parameter(interp: Interpreter, name: str) -> str | None:
         return "0"  # we don't have a real PID
     if name == "0":
         return interp.env.script_name
+    if name == "FUNCNAME":
+        return interp.env.call_stack[-1][0] if interp.env.call_stack else ""
+    if name == "BASH_SOURCE":
+        return "main" if interp.env.call_stack else ""
+    if name == "BASH_LINENO":
+        return str(interp.env.call_stack[-1][1]) if interp.env.call_stack else "0"
     if name.isdigit():
         idx = int(name) - 1
         if 0 <= idx < len(interp.env.positional):
@@ -592,10 +656,10 @@ def _escape_glob(text: str) -> str:
 
 
 def _glob_match(value: str, pattern: str) -> bool:
-    """Anchored glob match honouring extglob extensions."""
+    """Anchored glob match honouring extglob extensions and POSIX char classes."""
     from just_bash.interpreter.extglob import extglob_match
 
-    if any(c in pattern for c in "@?+*!") and "(" in pattern:
+    if "[:" in pattern or (any(c in pattern for c in "@?+*!") and "(" in pattern):
         return extglob_match(value, pattern)
     return fnmatch.fnmatchcase(value, pattern)
 
@@ -632,10 +696,17 @@ def _replace_pattern(
         return s
     import re
 
-    rx = fnmatch.translate(pattern)
-    # fnmatch.translate produces a regex that matches the entire string. We
-    # want to use it as a substring/anchored pattern instead.
-    rx = _strip_translate_anchors(rx)
+    # Patterns with extglob meta or POSIX char classes route through the
+    # extglob translator (which knows about them); plain globs use fnmatch.
+    if "[:" in pattern or (any(c in pattern for c in "@?+*!") and "(" in pattern):
+        from just_bash.interpreter.extglob import extglob_to_regex
+
+        rx = extglob_to_regex(pattern)
+    else:
+        rx = fnmatch.translate(pattern)
+        # fnmatch.translate produces a regex that matches the entire string;
+        # strip the trailing anchor so we can use it for substring matches.
+        rx = _strip_translate_anchors(rx)
     if anchor == "start":
         rx = "^" + rx
     elif anchor == "end":

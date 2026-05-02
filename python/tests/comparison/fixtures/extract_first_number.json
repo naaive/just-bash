@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "s=\"error code 1234 in module 5\"\nif [[ \"$s\" =~ ([0-9]+) ]]; then\n  echo \"first=${BASH_REMATCH[1]}\"\nfi",
+  "stderr": "",
+  "stdout": "first=1234\n"
+}

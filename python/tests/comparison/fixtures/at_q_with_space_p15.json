@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "x=\"hello world\"; echo \"${x@Q}\" ",
+  "stderr": "",
+  "stdout": "'hello world'\n"
+}

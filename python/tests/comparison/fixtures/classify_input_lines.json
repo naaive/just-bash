@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "for line in \"42\" \"hello\" \"a1b2\" \"\"; do\n  if [[ \"$line\" =~ ^[[:digit:]]+$ ]]; then\n    echo \"$line -> integer\"\n  elif [[ \"$line\" =~ ^[[:alpha:]]+$ ]]; then\n    echo \"$line -> word\"\n  elif [[ -z \"$line\" ]]; then\n    echo \"$line -> empty\"\n  else\n    echo \"$line -> mixed\"\n  fi\ndone",
+  "stderr": "",
+  "stdout": "42 -> integer\nhello -> word\na1b2 -> mixed\n -> empty\n"
+}

@@ -62,22 +62,72 @@ def _eval_unary(interp: Interpreter, op: str, operand: Word) -> bool:
     raise InterpreterError(f"unsupported test operator: {op}")
 
 
+_POSIX_REGEX_CLASSES = {
+    "alpha": "a-zA-Z",
+    "alnum": "a-zA-Z0-9",
+    "digit": "0-9",
+    "lower": "a-z",
+    "upper": "A-Z",
+    "space": r" \t\n\r\f\v",
+    "blank": r" \t",
+    "xdigit": "0-9a-fA-F",
+    "cntrl": r"\x00-\x1f\x7f",
+    "print": r"\x20-\x7e",
+    "graph": r"\x21-\x7e",
+    "punct": r"!-/:-@\[-`{-~",
+    "ascii": r"\x00-\x7f",
+    "word": r"a-zA-Z0-9_",
+}
+
+
+def _translate_posix_classes(regex: str) -> str:
+    """Replace POSIX bracket-classes ``[:NAME:]`` with Python equivalents."""
+    if "[:" not in regex:
+        return regex
+    out: list[str] = []
+    i = 0
+    while i < len(regex):
+        if regex.startswith("[:", i):
+            end = regex.find(":]", i + 2)
+            if end != -1:
+                name = regex[i + 2 : end]
+                replacement = _POSIX_REGEX_CLASSES.get(name)
+                if replacement is not None:
+                    out.append(replacement)
+                    i = end + 2
+                    continue
+        out.append(regex[i])
+        i += 1
+    return "".join(out)
+
+
 def _eval_binary(interp: Interpreter, op: str, left: Word, right: Word) -> bool:
     lv = expand_word_no_split(interp, left)
     if op == "=~":
         # Right side stays as a regex string, no glob escaping.
         rv = expand_word_no_split(interp, right)
+        rv = _translate_posix_classes(rv)
         try:
-            return re.search(rv, lv) is not None
+            m = re.search(rv, lv)
         except re.error as e:
             raise InterpreterError(f"invalid regex: {e}") from e
+        if m is None:
+            interp.env.set_array("BASH_REMATCH", [])
+            return False
+        # ``BASH_REMATCH[0]`` is the full match; subsequent indices are
+        # the captured groups (None -> empty string).
+        groups: list[str] = [m.group(0)]
+        for g in m.groups():
+            groups.append(g if g is not None else "")
+        interp.env.set_array("BASH_REMATCH", groups)
+        return True
     if op in ("=", "==", "!="):
         # Right is a glob pattern (only when it has glob meta + isn't fully quoted).
         # Bash always treats RHS as a pattern unless quoted; the parser already
         # distinguishes literal/escaped via the Word AST so ``expand_pattern``
         # gets it right.
         pattern = expand_pattern(interp, right)
-        if any(c in pattern for c in "?*+@!") and "(" in pattern:
+        if "[:" in pattern or (any(c in pattern for c in "?*+@!") and "(" in pattern):
             from just_bash.interpreter.extglob import extglob_match
 
             matched = extglob_match(lv, pattern)
