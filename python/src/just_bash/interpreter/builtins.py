@@ -346,10 +346,20 @@ def _b_set(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
 
 
 def _b_read(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
+    """``read [-r] [-d DELIM] [-n N] [-N N] [-s] [-t T] [-p PROMPT] [-a ARR] [VAR...]``.
+
+    The sandbox doesn't read from a tty, so ``-s`` (silent) and ``-t``
+    (timeout) are accepted but have no effect. ``-p PROMPT`` writes the
+    prompt to stderr only when stdin would otherwise be a tty (it goes to
+    stderr always here so script output stays predictable). ``-a NAME``
+    reads the line and word-splits into the named indexed array.
+    """
     raw_argv = argv[1:]
     var_names: list[str] = []
     raw = False
     delim = "\n"
+    n_chars: int | None = None
+    array_name: str | None = None
     i = 0
     while i < len(raw_argv):
         a = raw_argv[i]
@@ -357,8 +367,26 @@ def _b_read(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
             raw = True
             i += 1
             continue
+        if a in ("-s", "--silent"):
+            i += 1
+            continue
         if a == "-d" and i + 1 < len(raw_argv):
             delim = raw_argv[i + 1]
+            i += 2
+            continue
+        if a in ("-n", "-N") and i + 1 < len(raw_argv):
+            n_chars = int(raw_argv[i + 1])
+            i += 2
+            continue
+        if a == "-t" and i + 1 < len(raw_argv):
+            i += 2
+            continue
+        if a == "-p" and i + 1 < len(raw_argv):
+            io_ctx.stderr.write(raw_argv[i + 1].encode("utf-8"))
+            i += 2
+            continue
+        if a == "-a" and i + 1 < len(raw_argv):
+            array_name = raw_argv[i + 1]
             i += 2
             continue
         if a.startswith("-"):
@@ -367,26 +395,34 @@ def _b_read(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
         var_names.append(a)
         i += 1
     data = io_ctx.stdin.decode("utf-8", errors="replace")
-    line, _, rest = data.partition(delim or "\n")
-    io_ctx.stdin = rest.encode("utf-8")
+    if n_chars is not None:
+        line = data[:n_chars]
+        io_ctx.stdin = data[n_chars:].encode("utf-8")
+    else:
+        line, _, rest = data.partition(delim or "\n")
+        io_ctx.stdin = rest.encode("utf-8")
     if not raw:
         line = line.replace("\\\n", "")
+    if array_name is not None:
+        ifs = interp.env.get("IFS") or " \t\n"
+        fields = _ifs_split(line, ifs) if line else []
+        interp.env.set_array(array_name, fields)
+        return 0 if data else 1
     if not var_names:
         var_names = ["REPLY"]
     ifs = interp.env.get("IFS") or " \t\n"
     if len(var_names) == 1:
         interp.env.set_var(var_names[0], line)
-        return 0
+        return 0 if data else 1
     fields = _ifs_split(line, ifs)
     for i, name in enumerate(var_names):
         if i == len(var_names) - 1:
-            # Last variable absorbs the remaining fields.
             interp.env.set_var(
                 name, (ifs[0] if ifs else " ").join(fields[i:]) if fields[i:] else ""
             )
         else:
             interp.env.set_var(name, fields[i] if i < len(fields) else "")
-    return 0
+    return 0 if data else 1
 
 
 def _ifs_split(line: str, ifs: str) -> list[str]:

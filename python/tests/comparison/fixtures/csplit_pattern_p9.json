@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf \"header\\n--SEP--\\nbody1\\n--SEP--\\nbody2\\n\" > /tmp/x\ncsplit /tmp/x \"/^--SEP--$/\"\necho \"ok\"",
+  "stderr": "",
+  "stdout": "7\n28\nok\n"
+}

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "echo \"before \\${tag} after\" | sed \"s|\\${tag}|HIT|g\"",
+  "stderr": "",
+  "stdout": "before HIT after\n"
+}

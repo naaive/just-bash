@@ -17,6 +17,7 @@ from just_bash.commands import (
     phase6,
     phase7,
     phase8,
+    phase9,
     sed_cmd,
     text_utils,
 )
@@ -166,6 +167,28 @@ def default_registry() -> dict[str, CommandImpl]:
             "mountpoint": phase8.cmd_mountpoint,
             "strings": phase8.cmd_strings,
             "jot": phase8.cmd_seq_alias,
+        }
+    )
+    # Phase 9: process / system / hardware stubs.
+    base.update(
+        {
+            "kill": phase9.cmd_kill,
+            "killall": phase9.cmd_killall,
+            "pgrep": phase9.cmd_pgrep,
+            "pkill": phase9.cmd_pkill,
+            "fuser": phase9.cmd_fuser,
+            "pwait": phase9.cmd_pwait,
+            "who": phase9.cmd_who,
+            "w": phase9.cmd_w,
+            "last": phase9.cmd_last,
+            "logname": phase9.cmd_logname,
+            "groups": phase9.cmd_groups,
+            "tty": phase9.cmd_tty,
+            "lscpu": phase9.cmd_lscpu,
+            "lsmem": phase9.cmd_lsmem,
+            "dmesg": phase9.cmd_dmesg,
+            "uptime": phase9.cmd_uptime,
+            "csplit": phase9.cmd_csplit,
         }
     )
     return base

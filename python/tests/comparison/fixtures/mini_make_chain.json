@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "declare -A actions\nactions[a]='echo step a'\nactions[b]='echo step b'\ndeclare -A deps\ndeps[c]=\"a b\"\nbuild() {\n  local t=$1\n  for d in ${deps[$t]:-}; do\n    [[ -n ${actions[$d]:-} ]] && eval \"${actions[$d]}\"\n  done\n}\nbuild c",
+  "stderr": "",
+  "stdout": "step a\nstep b\n"
+}

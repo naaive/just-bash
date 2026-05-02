@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "declare -A m\nm[alpha]=1\nm[beta]=2\nm[gamma]=3\ntotal=0\nfor k in \"${!m[@]}\"; do\n  v=${m[$k]}\n  ((total += v))\ndone\necho \"$total\"",
+  "stderr": "",
+  "stdout": "6\n"
+}

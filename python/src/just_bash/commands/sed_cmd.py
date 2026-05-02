@@ -598,6 +598,18 @@ def _bre_to_python(pat: str) -> str:
             out.append("\\" + ch)
             i += 1
             continue
+        # In POSIX BRE ``$`` is only an end-of-line anchor at the very end of
+        # the pattern; mid-pattern it's literal. Python ``re`` always treats
+        # ``$`` as an anchor, so we escape mid-pattern occurrences.
+        if ch == "$" and i + 1 < len(pat):
+            out.append(r"\$")
+            i += 1
+            continue
+        # ``^`` is similarly only special at the start.
+        if ch == "^" and i > 0:
+            out.append(r"\^")
+            i += 1
+            continue
         out.append(ch)
         i += 1
     return "".join(out)

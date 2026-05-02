@@ -417,10 +417,23 @@ class Interpreter:
                     if v is not None:
                         v.exported = False
 
+    # Commands whose ``NAME=VALUE`` arguments are NOT subject to word splitting
+    # or globbing on the value side - matches bash's "assignment context".
+    _ASSIGN_CONTEXT_CMDS = frozenset({"declare", "typeset", "local", "export", "readonly"})
+
     def _build_argv(self, cmd: SimpleCommand) -> list[str]:
         argv: list[str] = []
         if cmd.name is not None:
             argv.extend(expand_word(self, cmd.name))
+        if argv and argv[0] in Interpreter._ASSIGN_CONTEXT_CMDS:
+            # ``local x=$1`` etc.: word-split is suppressed when an arg looks
+            # like ``NAME=...`` so values may contain spaces / globs literally.
+            for arg in cmd.args:
+                if _looks_like_assignment(arg):
+                    argv.append(expand_word_no_split(self, arg))
+                else:
+                    argv.extend(expand_word(self, arg))
+            return argv
         for arg in cmd.args:
             argv.extend(expand_word(self, arg))
         return argv
@@ -608,6 +621,30 @@ class _RedirectingStream(io.BytesIO):
         super().write(data)
         self.interp.fs.append_file(self.path, data)
         return len(data)
+
+
+def _looks_like_assignment(word: Word) -> bool:
+    """``NAME=VALUE`` / ``NAME+=VALUE`` heuristic over a Word's leading literal."""
+    if not word.parts:
+        return False
+    from just_bash.ast.nodes import Literal
+
+    first = word.parts[0]
+    if not isinstance(first, Literal):
+        return False
+    text = first.value
+    if not text:
+        return False
+    if not (text[0].isalpha() or text[0] == "_"):
+        return False
+    i = 1
+    while i < len(text) and (text[i].isalnum() or text[i] == "_"):
+        i += 1
+    if i >= len(text):
+        return False
+    if text[i] == "=":
+        return True
+    return text[i] == "+" and i + 1 < len(text) and text[i + 1] == "="
 
 
 # ---------------------------------------------------------------------------

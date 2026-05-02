@@ -221,6 +221,14 @@ def _bre_to_python(pat: str) -> str:
             out.append("\\" + ch)
             i += 1
             continue
+        if ch == "$" and i + 1 < len(pat):
+            out.append(r"\$")
+            i += 1
+            continue
+        if ch == "^" and i > 0:
+            out.append(r"\^")
+            i += 1
+            continue
         out.append(ch)
         i += 1
     return "".join(out)

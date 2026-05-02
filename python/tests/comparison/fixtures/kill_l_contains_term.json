@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "if kill -l | grep -q TERM; then echo ok; else echo missing; fi",
+  "stderr": "",
+  "stdout": "ok\n"
+}

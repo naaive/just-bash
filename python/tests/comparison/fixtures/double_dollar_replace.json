@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "template='hi ${who}'\nwho=alice\nout=$(echo \"$template\" | sed \"s|\\${who}|$who|g\")\necho \"$out\"",
+  "stderr": "",
+  "stdout": "hi alice\n"
+}
