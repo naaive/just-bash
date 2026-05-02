@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "n=0\nuntil (( n >= 4 )); do\n  echo \"n=$n\"\n  n=$((n + 1))\ndone",
+  "stderr": "",
+  "stdout": "n=0\nn=1\nn=2\nn=3\n"
+}

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "for ((r = 1; r <= 3; r++)); do\n  for ((c = 1; c <= 3; c++)); do\n    printf '%3d ' \"$((r * c))\"\n  done\n  printf '\\n'\ndone",
+  "stderr": "",
+  "stdout": "  1   2   3 \n  2   4   6 \n  3   6   9 \n"
+}

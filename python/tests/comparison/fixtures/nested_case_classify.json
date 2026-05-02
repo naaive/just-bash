@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "classify() {\n  local x=$1\n  case \"$x\" in\n    [0-9])\n      case \"$x\" in\n        0) echo zero ;;\n        [1-9]) echo digit ;;\n      esac\n      ;;\n    [a-z]) echo lower ;;\n    [A-Z]) echo upper ;;\n    *) echo other ;;\n  esac\n}\nfor v in 0 5 a Z !; do\n  classify \"$v\"\ndone",
+  "stderr": "",
+  "stdout": "zero\ndigit\nlower\nupper\nother\n"
+}

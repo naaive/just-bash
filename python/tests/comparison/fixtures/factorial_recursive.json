@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "fact() {\n  if (( $1 <= 1 )); then\n    echo 1\n    return\n  fi\n  local prev\n  prev=$(fact $(( $1 - 1 )))\n  echo $(( $1 * prev ))\n}\nfact 6",
+  "stderr": "",
+  "stdout": "720\n"
+}

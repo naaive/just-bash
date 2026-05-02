@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "inner='a,b,c,d'\nIFS=',' read -ra arr <<< \"$inner\"\necho \"${#arr[@]}\"\necho \"${arr[1]}\"",
+  "stderr": "",
+  "stdout": "4\nb\n"
+}

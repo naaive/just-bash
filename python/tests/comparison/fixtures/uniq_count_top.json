@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "echo \"the fox the dog the cat\" \\\n  | tr ' ' '\\n' \\\n  | sort \\\n  | uniq -c \\\n  | sort -nr \\\n  | head -1 \\\n  | sed 's/^ *//'",
+  "stderr": "",
+  "stdout": "3 the\n"
+}

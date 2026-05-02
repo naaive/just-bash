@@ -19,6 +19,7 @@ from just_bash.commands import (
     phase8,
     phase9,
     phase10,
+    phase11,
     sed_cmd,
     text_utils,
 )
@@ -207,6 +208,28 @@ def default_registry() -> dict[str, CommandImpl]:
             "zcat": phase10.cmd_zcat,
             "gzip": phase10.cmd_gzip,
             "gunzip": phase10.cmd_gunzip,
+        }
+    )
+    # Phase 11: directory tree, modern aliases (rg/fd/bat/sd/ag/fzf/hexyl),
+    # CSV/TSV translators, system-info helpers.
+    base.update(
+        {
+            "tree": phase11.cmd_tree,
+            "rg": phase11.cmd_rg,
+            "ag": phase11.cmd_ag,
+            "fd": phase11.cmd_fd,
+            "fdfind": phase11.cmd_fdfind,
+            "bat": phase11.cmd_bat,
+            "sd": phase11.cmd_sd,
+            "fzf": phase11.cmd_fzf,
+            "hexyl": phase11.cmd_hexyl,
+            "csv2tsv": phase11.cmd_csv2tsv,
+            "tsv2csv": phase11.cmd_tsv2csv,
+            "xargs0": phase11.cmd_xargs0,
+            "getconf": phase11.cmd_getconf,
+            "locale": phase11.cmd_locale,
+            "iconv": phase11.cmd_iconv,
+            "yq": phase11.cmd_yq,
         }
     )
     return base

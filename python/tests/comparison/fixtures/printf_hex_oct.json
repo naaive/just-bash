@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf 'hex=%x oct=%o\\n' 255 8",
+  "stderr": "",
+  "stdout": "hex=ff oct=10\n"
+}

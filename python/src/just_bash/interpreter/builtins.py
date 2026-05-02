@@ -354,7 +354,9 @@ def _b_read(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
     stderr always here so script output stays predictable). ``-a NAME``
     reads the line and word-splits into the named indexed array.
     """
-    raw_argv = argv[1:]
+    raw_argv = _expand_combined_short_flags(
+        argv[1:], value_taking={"d", "n", "N", "t", "p", "a", "u", "i"}
+    )
     var_names: list[str] = []
     raw = False
     delim = "\n"
@@ -423,6 +425,33 @@ def _b_read(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
         else:
             interp.env.set_var(name, fields[i] if i < len(fields) else "")
     return 0 if data else 1
+
+
+def _expand_combined_short_flags(argv: list[str], *, value_taking: set[str]) -> list[str]:
+    """Split bundled short flags (``-rax`` -> ``-r -a x``).
+
+    Stops bundling at the first option that takes a value (the rest of the
+    cluster is treated as that value, matching ``getopt(3)`` semantics).
+    """
+    out: list[str] = []
+    for tok in argv:
+        if len(tok) <= 2 or not tok.startswith("-") or tok.startswith("--") or tok == "-":
+            out.append(tok)
+            continue
+        body = tok[1:]
+        i = 0
+        while i < len(body):
+            ch = body[i]
+            if ch in value_taking:
+                # Next chars form the value attached to this option.
+                value = body[i + 1 :]
+                out.append(f"-{ch}")
+                if value:
+                    out.append(value)
+                break
+            out.append(f"-{ch}")
+            i += 1
+    return out
 
 
 def _ifs_split(line: str, ifs: str) -> list[str]:

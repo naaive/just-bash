@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "n=$(echo 5)\necho $((n * 7))",
+  "stderr": "",
+  "stdout": "35\n"
+}

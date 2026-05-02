@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "n=3\ncat <<-EOF\n\t\t(stripped)\n\t\tcount is $n\n\tEOF",
+  "stderr": "",
+  "stdout": "(stripped)\ncount is 3\n"
+}

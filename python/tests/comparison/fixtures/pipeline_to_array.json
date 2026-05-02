@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "text=$'banana\\napple\\nbanana\\ncherry\\napple'\nmapfile -t fruits < <(echo \"$text\" | sort -u)\necho \"count=${#fruits[@]}\"\nfor f in \"${fruits[@]}\"; do\n  printf 'item: %s\\n' \"$f\"\ndone",
+  "stderr": "",
+  "stdout": "count=3\nitem: apple\nitem: banana\nitem: cherry\n"
+}

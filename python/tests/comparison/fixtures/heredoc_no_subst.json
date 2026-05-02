@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "name=alice\ncat <<'EOF'\nhello $name\nEOF",
+  "stderr": "",
+  "stdout": "hello $name\n"
+}
