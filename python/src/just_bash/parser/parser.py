@@ -1,0 +1,719 @@
+"""Bash recursive-descent parser.
+
+Produces a ``Script`` AST. The grammar tracked here is the practical subset of
+bash that the MVP interpreter handles - simple commands, pipelines, ``&&``
+``||`` ``;`` chains, redirections, ``if`` / ``for`` / ``while`` / ``until`` /
+``case``, command groups, subshells, function definitions, ``[[ ]]`` and
+``(( ))`` compound commands.
+"""
+
+from __future__ import annotations
+
+from typing import cast
+
+from just_bash.ast.nodes import (
+    Arithmetic,
+    ArithmeticCommand,
+    Assignment,
+    Case,
+    CaseItem,
+    Command,
+    CompoundCommand,
+    CondAnd,
+    CondBinary,
+    Conditional,
+    ConditionalCommand,
+    CondNot,
+    CondOr,
+    CondUnary,
+    For,
+    FunctionDef,
+    Group,
+    HereDoc,
+    If,
+    IfClause,
+    Pipeline,
+    Redirection,
+    Script,
+    SimpleCommand,
+    Statement,
+    Subshell,
+    Until,
+    While,
+    Word,
+)
+from just_bash.parser.arithmetic_parser import parse_arith_text
+from just_bash.parser.lexer import Lexer, Token, TokenKind
+from just_bash.parser.word_parser import parse_word
+
+
+class ParseError(Exception):
+    def __init__(self, message: str, token: Token | None = None) -> None:
+        if token is not None:
+            message = f"line {token.line}:{token.column}: {message} (got {token.text!r})"
+        super().__init__(message)
+        self.token = token
+
+
+_RESERVED_WORDS = frozenset(
+    {
+        "if",
+        "then",
+        "elif",
+        "else",
+        "fi",
+        "for",
+        "in",
+        "do",
+        "done",
+        "while",
+        "until",
+        "case",
+        "esac",
+        "function",
+        "select",
+        "time",
+        "{",
+        "}",
+        "!",
+        "[[",
+        "]]",
+    }
+)
+_TERMINATORS = frozenset({";", "\n", "&"})
+_BINARY_COND_OPS = frozenset(
+    {"=", "==", "!=", "=~", "<", ">", "-eq", "-ne", "-lt", "-le", "-gt", "-ge", "-nt", "-ot", "-ef"}
+)
+_UNARY_COND_OPS = frozenset(
+    {
+        "-a",
+        "-b",
+        "-c",
+        "-d",
+        "-e",
+        "-f",
+        "-g",
+        "-h",
+        "-k",
+        "-p",
+        "-r",
+        "-s",
+        "-t",
+        "-u",
+        "-w",
+        "-x",
+        "-G",
+        "-L",
+        "-N",
+        "-O",
+        "-S",
+        "-z",
+        "-n",
+        "-v",
+        "-R",
+    }
+)
+
+
+class Parser:
+    """Token-driven parser that builds AST nodes."""
+
+    __slots__ = ("_heredocs", "_lookahead", "lexer")
+
+    def __init__(self, source: str) -> None:
+        self.lexer = Lexer(source)
+        self._lookahead: list[Token] = []
+        self._heredocs: list[tuple[HereDoc, bool]] = []  # pending heredocs (unused in MVP)
+
+    # ----------------------------------------------------------- token helpers
+    def _peek(self, offset: int = 0) -> Token:
+        while len(self._lookahead) <= offset:
+            self._lookahead.append(self.lexer.next_token())
+        return self._lookahead[offset]
+
+    def _next(self) -> Token:
+        if self._lookahead:
+            return self._lookahead.pop(0)
+        return self.lexer.next_token()
+
+    def _consume(self, kind: TokenKind, text: str | None = None) -> Token:
+        tok = self._next()
+        if tok.kind is not kind:
+            raise ParseError(f"expected {kind.name}", tok)
+        if text is not None and tok.text != text:
+            raise ParseError(f"expected {text!r}", tok)
+        return tok
+
+    def _at_eof(self) -> bool:
+        return self._peek().kind is TokenKind.EOF
+
+    def _skip_newlines(self) -> None:
+        while self._peek().kind is TokenKind.NEWLINE:
+            self._next()
+
+    def _is_reserved(self, tok: Token, *words: str) -> bool:
+        return tok.kind is TokenKind.WORD and tok.text in words
+
+    # ----------------------------------------------------------------- entry
+    def parse(self) -> Script:
+        statements: list[Statement] = []
+        self._skip_newlines()
+        while not self._at_eof():
+            stmt = self._parse_statement()
+            if stmt is not None:
+                statements.append(stmt)
+            self._skip_newlines()
+        return Script(statements=statements)
+
+    # -------------------------------------------------------------- statements
+    def _parse_statement(self) -> Statement | None:
+        first = self._parse_pipeline()
+        if first is None:
+            return None
+        pipelines = [first]
+        operators: list[str] = []
+        background = False
+        while True:
+            tok = self._peek()
+            if tok.kind is TokenKind.OPERATOR and tok.text in ("&&", "||"):
+                self._next()
+                self._skip_newlines()
+                nxt = self._parse_pipeline()
+                if nxt is None:
+                    raise ParseError("expected command after && or ||", tok)
+                operators.append(tok.text)
+                pipelines.append(nxt)
+                continue
+            if tok.kind is TokenKind.OPERATOR and tok.text == ";":
+                self._next()
+                # Trailing ; is fine; if more commands follow on the same logical line, keep going.
+                if self._is_command_start():
+                    operators.append(";")
+                    nxt = self._parse_pipeline()
+                    if nxt is None:
+                        break
+                    pipelines.append(nxt)
+                    continue
+                break
+            if tok.kind is TokenKind.OPERATOR and tok.text == "&":
+                self._next()
+                background = True
+                break
+            break
+        return Statement(
+            pipelines=pipelines,
+            operators=cast("list[str]", operators),  # type: ignore[arg-type]
+            background=background,
+            line=first.line,
+        )
+
+    def _is_command_start(self) -> bool:
+        tok = self._peek()
+        if tok.kind is TokenKind.EOF:
+            return False
+        if tok.kind is TokenKind.NEWLINE:
+            return False
+        if tok.kind is TokenKind.OPERATOR and tok.text in {
+            ")",
+            "}",
+            ";",
+            "&",
+            "&&",
+            "||",
+            "|",
+            ";;",
+        }:
+            return False
+        return not (
+            tok.kind is TokenKind.WORD
+            and tok.text in {"then", "else", "elif", "fi", "do", "done", "esac", "}"}
+        )
+
+    # ---------------------------------------------------------------- pipeline
+    def _parse_pipeline(self) -> Pipeline | None:
+        self._skip_newlines()
+        if not self._is_command_start():
+            return None
+        negated = False
+        tok = self._peek()
+        if tok.kind is TokenKind.WORD and tok.text == "!":
+            self._next()
+            negated = True
+            self._skip_newlines()
+        cmd = self._parse_command()
+        if cmd is None:
+            raise ParseError("expected command", self._peek())
+        commands: list[Command] = [cmd]
+        pipe_stderr: list[bool] = []
+        while True:
+            t = self._peek()
+            if t.kind is TokenKind.OPERATOR and t.text == "|":
+                self._next()
+                pipe_stderr.append(False)
+                self._skip_newlines()
+                nxt = self._parse_command()
+                if nxt is None:
+                    raise ParseError("expected command after |", t)
+                commands.append(nxt)
+                continue
+            if t.kind is TokenKind.OPERATOR and t.text == "|&":
+                self._next()
+                pipe_stderr.append(True)
+                self._skip_newlines()
+                nxt = self._parse_command()
+                if nxt is None:
+                    raise ParseError("expected command after |&", t)
+                commands.append(nxt)
+                continue
+            break
+        return Pipeline(
+            commands=commands,
+            negated=negated,
+            pipe_stderr=pipe_stderr,
+            line=cmd.line if hasattr(cmd, "line") else 0,
+        )
+
+    # ----------------------------------------------------------------- commands
+    def _parse_command(self) -> Command | None:
+        tok = self._peek()
+        if tok.kind is TokenKind.WORD:
+            if tok.text == "if":
+                return self._parse_if()
+            if tok.text == "for":
+                return self._parse_for()
+            if tok.text == "while":
+                return self._parse_while()
+            if tok.text == "until":
+                return self._parse_until()
+            if tok.text == "case":
+                return self._parse_case()
+            if tok.text == "function":
+                return self._parse_function_keyword()
+            if tok.text == "{":
+                return self._parse_group()
+            if tok.text == "[[":
+                return self._parse_conditional_command()
+        if tok.kind is TokenKind.OPERATOR and tok.text == "(":
+            return self._parse_subshell()
+        if tok.kind is TokenKind.OPERATOR and tok.text.startswith("((") and tok.text.endswith("))"):
+            return self._parse_arith_command_token()
+        # Function definition: name() { ... }
+        if (
+            tok.kind is TokenKind.WORD
+            and self._peek(1).kind is TokenKind.OPERATOR
+            and self._peek(1).text == "("
+            and self._peek(2).kind is TokenKind.OPERATOR
+            and self._peek(2).text == ")"
+        ):
+            return self._parse_function_paren()
+        return self._parse_simple_command()
+
+    # ------------------------------------------------- simple command + assigns
+    def _parse_simple_command(self) -> SimpleCommand | None:
+        line = self._peek().line
+        assignments: list[Assignment] = []
+        # Leading assignments.
+        while True:
+            tok = self._peek()
+            if tok.kind is not TokenKind.WORD:
+                break
+            assn = _try_parse_assignment(tok)
+            if assn is None:
+                break
+            self._next()
+            assignments.append(assn)
+        # Command name.
+        name: Word | None = None
+        args: list[Word] = []
+        redirections: list[Redirection] = []
+        first_word = True
+        while True:
+            tok = self._peek()
+            if tok.kind is TokenKind.IO_NUMBER or (
+                tok.kind is TokenKind.OPERATOR
+                and tok.text
+                in {"<", ">", ">>", ">|", "<>", "<<<", "<<", "<<-", "&>", "&>>", ">&", "<&"}
+            ):
+                redirections.append(self._parse_redirection())
+                continue
+            if tok.kind is TokenKind.WORD:
+                w = parse_word(tok.text, line=tok.line)
+                self._next()
+                if first_word and name is None:
+                    name = w
+                else:
+                    args.append(w)
+                first_word = False
+                continue
+            break
+        if name is None and not assignments and not redirections:
+            return None
+        return SimpleCommand(
+            name=name,
+            args=args,
+            assignments=assignments,
+            redirections=redirections,
+            line=line,
+        )
+
+    def _parse_redirection(self) -> Redirection:
+        tok = self._peek()
+        fd: int | None = None
+        if tok.kind is TokenKind.IO_NUMBER:
+            self._next()
+            fd = int(tok.text)
+            tok = self._peek()
+        if tok.kind is not TokenKind.OPERATOR:
+            raise ParseError("expected redirection operator", tok)
+        op = tok.text
+        self._next()
+        target_tok = self._next()
+        if target_tok.kind is not TokenKind.WORD:
+            raise ParseError("expected redirection target", target_tok)
+        target_word = parse_word(target_tok.text, line=target_tok.line)
+        return Redirection(operator=op, target=target_word, fd=fd, line=tok.line)  # type: ignore[arg-type]
+
+    # ------------------------------------------------------------------- if
+    def _parse_if(self) -> If:
+        line = self._peek().line
+        self._consume(TokenKind.WORD, "if")
+        clauses: list[IfClause] = []
+        else_body: list[Statement] | None = None
+        condition = self._parse_compound_list_until({"then"})
+        self._consume(TokenKind.WORD, "then")
+        body = self._parse_compound_list_until({"elif", "else", "fi"})
+        clauses.append(IfClause(condition=condition, body=body))
+        while self._is_reserved(self._peek(), "elif"):
+            self._next()
+            cond = self._parse_compound_list_until({"then"})
+            self._consume(TokenKind.WORD, "then")
+            b = self._parse_compound_list_until({"elif", "else", "fi"})
+            clauses.append(IfClause(condition=cond, body=b))
+        if self._is_reserved(self._peek(), "else"):
+            self._next()
+            else_body = self._parse_compound_list_until({"fi"})
+        self._consume(TokenKind.WORD, "fi")
+        return If(clauses=clauses, else_body=else_body, line=line)
+
+    def _parse_compound_list_until(self, terminators: set[str]) -> list[Statement]:
+        out: list[Statement] = []
+        self._skip_newlines()
+        while True:
+            tok = self._peek()
+            if tok.kind is TokenKind.EOF:
+                raise ParseError(f"unexpected EOF, expected one of {sorted(terminators)}", tok)
+            if tok.kind is TokenKind.WORD and tok.text in terminators:
+                return out
+            stmt = self._parse_statement()
+            if stmt is not None:
+                out.append(stmt)
+            self._skip_newlines()
+
+    # ------------------------------------------------------------------- for
+    def _parse_for(self) -> For:
+        line = self._peek().line
+        self._consume(TokenKind.WORD, "for")
+        var_tok = self._next()
+        if var_tok.kind is not TokenKind.WORD:
+            raise ParseError("expected for-loop variable", var_tok)
+        variable = var_tok.text
+        self._skip_newlines()
+        words: list[Word] | None = None
+        if self._is_reserved(self._peek(), "in"):
+            self._next()
+            words = []
+            while True:
+                tok = self._peek()
+                if tok.kind is TokenKind.OPERATOR and tok.text in (";", "\n"):
+                    self._next()
+                    break
+                if tok.kind is TokenKind.NEWLINE:
+                    self._next()
+                    break
+                if tok.kind is TokenKind.WORD and tok.text in {"do"}:
+                    break
+                if tok.kind is TokenKind.WORD:
+                    self._next()
+                    words.append(parse_word(tok.text, line=tok.line))
+                    continue
+                if tok.kind is TokenKind.EOF:
+                    raise ParseError("unexpected EOF in for-loop", tok)
+                raise ParseError("unexpected token in for-loop", tok)
+        self._skip_newlines()
+        # optional ;
+        if self._peek().kind is TokenKind.OPERATOR and self._peek().text == ";":
+            self._next()
+        self._skip_newlines()
+        self._consume(TokenKind.WORD, "do")
+        body = self._parse_compound_list_until({"done"})
+        self._consume(TokenKind.WORD, "done")
+        return For(variable=variable, words=words, body=body, line=line)
+
+    # ------------------------------------------------------------ while/until
+    def _parse_while(self) -> While:
+        return cast("While", self._parse_loop("while", While))
+
+    def _parse_until(self) -> Until:
+        return cast("Until", self._parse_loop("until", Until))
+
+    def _parse_loop(self, kw: str, ctor: type) -> CompoundCommand:
+        line = self._peek().line
+        self._consume(TokenKind.WORD, kw)
+        condition = self._parse_compound_list_until({"do"})
+        self._consume(TokenKind.WORD, "do")
+        body = self._parse_compound_list_until({"done"})
+        self._consume(TokenKind.WORD, "done")
+        return ctor(condition=condition, body=body, line=line)
+
+    # ------------------------------------------------------------------- case
+    def _parse_case(self) -> Case:
+        line = self._peek().line
+        self._consume(TokenKind.WORD, "case")
+        word_tok = self._next()
+        if word_tok.kind is not TokenKind.WORD:
+            raise ParseError("expected case word", word_tok)
+        word = parse_word(word_tok.text, line=word_tok.line)
+        self._skip_newlines()
+        if not self._is_reserved(self._peek(), "in"):
+            raise ParseError("expected 'in'", self._peek())
+        self._next()
+        self._skip_newlines()
+        items: list[CaseItem] = []
+        while True:
+            tok = self._peek()
+            if self._is_reserved(tok, "esac"):
+                self._next()
+                break
+            if tok.kind is TokenKind.EOF:
+                raise ParseError("unexpected EOF in case", tok)
+            items.append(self._parse_case_item())
+            self._skip_newlines()
+        return Case(word=word, items=items, line=line)
+
+    def _parse_case_item(self) -> CaseItem:
+        # Optional leading (
+        if self._peek().kind is TokenKind.OPERATOR and self._peek().text == "(":
+            self._next()
+        patterns: list[Word] = []
+        while True:
+            tok = self._next()
+            if tok.kind is not TokenKind.WORD:
+                raise ParseError("expected case pattern", tok)
+            patterns.append(parse_word(tok.text, line=tok.line))
+            sep = self._peek()
+            if sep.kind is TokenKind.OPERATOR and sep.text == "|":
+                self._next()
+                continue
+            if sep.kind is TokenKind.OPERATOR and sep.text == ")":
+                self._next()
+                break
+            raise ParseError("expected | or ) in case pattern", sep)
+        body: list[Statement] = []
+        self._skip_newlines()
+        while True:
+            tok = self._peek()
+            if tok.kind is TokenKind.OPERATOR and tok.text in {";;", ";&", ";;&"}:
+                terminator = tok.text
+                self._next()
+                return CaseItem(patterns=patterns, body=body, terminator=terminator)  # type: ignore[arg-type]
+            if self._is_reserved(tok, "esac"):
+                return CaseItem(patterns=patterns, body=body, terminator=";;")
+            stmt = self._parse_statement()
+            if stmt is not None:
+                body.append(stmt)
+            self._skip_newlines()
+
+    def _parse_arith_command_token(self) -> ArithmeticCommand:
+        tok = self._next()
+        # tok.text is "((<body>))" - strip the wrappers.
+        body = tok.text[2:-2]
+        expr = parse_arith_text(body)
+        return ArithmeticCommand(expression=expr, line=tok.line)
+
+    def _parse_subshell(self) -> Subshell:
+        line = self._peek().line
+        self._consume(TokenKind.OPERATOR, "(")
+        body = self._parse_compound_list_until_close_paren()
+        self._consume(TokenKind.OPERATOR, ")")
+        return Subshell(body=body, line=line)
+
+    def _parse_compound_list_until_close_paren(self) -> list[Statement]:
+        out: list[Statement] = []
+        self._skip_newlines()
+        while True:
+            tok = self._peek()
+            if tok.kind is TokenKind.OPERATOR and tok.text == ")":
+                return out
+            if tok.kind is TokenKind.EOF:
+                raise ParseError("unexpected EOF in subshell", tok)
+            stmt = self._parse_statement()
+            if stmt is not None:
+                out.append(stmt)
+            self._skip_newlines()
+
+    def _parse_group(self) -> Group:
+        line = self._peek().line
+        self._consume(TokenKind.WORD, "{")
+        body = self._parse_compound_list_until({"}"})
+        self._consume(TokenKind.WORD, "}")
+        return Group(body=body, line=line)
+
+    # ---------------------------------------------------------------- functions
+    def _parse_function_keyword(self) -> FunctionDef:
+        line = self._peek().line
+        self._consume(TokenKind.WORD, "function")
+        name_tok = self._next()
+        if name_tok.kind is not TokenKind.WORD:
+            raise ParseError("expected function name", name_tok)
+        # Optional ()
+        if self._peek().kind is TokenKind.OPERATOR and self._peek().text == "(":
+            self._next()
+            self._consume(TokenKind.OPERATOR, ")")
+        self._skip_newlines()
+        body = self._parse_compound_command_for_function()
+        return FunctionDef(name=name_tok.text, body=body, line=line)
+
+    def _parse_function_paren(self) -> FunctionDef:
+        line = self._peek().line
+        name_tok = self._next()
+        self._consume(TokenKind.OPERATOR, "(")
+        self._consume(TokenKind.OPERATOR, ")")
+        self._skip_newlines()
+        body = self._parse_compound_command_for_function()
+        return FunctionDef(name=name_tok.text, body=body, line=line)
+
+    def _parse_compound_command_for_function(self) -> CompoundCommand:
+        tok = self._peek()
+        if tok.kind is TokenKind.WORD and tok.text == "{":
+            return self._parse_group()
+        if tok.kind is TokenKind.OPERATOR and tok.text == "(":
+            return cast("CompoundCommand", self._parse_subshell())
+        if tok.kind is TokenKind.WORD and tok.text in {"if", "for", "while", "until", "case"}:
+            cmd = self._parse_command()
+            if not isinstance(
+                cmd,
+                (
+                    If,
+                    For,
+                    While,
+                    Until,
+                    Case,
+                    Group,
+                    Subshell,
+                    ArithmeticCommand,
+                    ConditionalCommand,
+                ),
+            ):
+                raise ParseError("expected compound command for function body", tok)
+            return cmd
+        raise ParseError("expected compound command for function body", tok)
+
+    # ------------------------------------------------------------ [[ ... ]]
+    def _parse_conditional_command(self) -> ConditionalCommand:
+        line = self._peek().line
+        self._consume(TokenKind.WORD, "[[")
+        expr = self._parse_cond_or()
+        if not self._is_reserved(self._peek(), "]]"):
+            raise ParseError("expected ']]'", self._peek())
+        self._next()
+        return ConditionalCommand(expression=expr, line=line)
+
+    def _parse_cond_or(self) -> Conditional:
+        left = self._parse_cond_and()
+        while self._peek().kind is TokenKind.OPERATOR and self._peek().text == "||":
+            self._next()
+            right = self._parse_cond_and()
+            left = CondOr(left=left, right=right)
+        return left
+
+    def _parse_cond_and(self) -> Conditional:
+        left = self._parse_cond_unary()
+        while self._peek().kind is TokenKind.OPERATOR and self._peek().text == "&&":
+            self._next()
+            right = self._parse_cond_unary()
+            left = CondAnd(left=left, right=right)
+        return left
+
+    def _parse_cond_unary(self) -> Conditional:
+        tok = self._peek()
+        if tok.kind is TokenKind.WORD and tok.text == "!":
+            self._next()
+            return CondNot(operand=self._parse_cond_unary())
+        if tok.kind is TokenKind.OPERATOR and tok.text == "(":
+            self._next()
+            inner = self._parse_cond_or()
+            if not (self._peek().kind is TokenKind.OPERATOR and self._peek().text == ")"):
+                raise ParseError("expected ')'", self._peek())
+            self._next()
+            return inner
+        return self._parse_cond_primary()
+
+    def _parse_cond_primary(self) -> Conditional:
+        first = self._next()
+        if first.kind is not TokenKind.WORD:
+            raise ParseError("expected word in conditional", first)
+        if first.text in _UNARY_COND_OPS:
+            operand_tok = self._next()
+            if operand_tok.kind is not TokenKind.WORD:
+                raise ParseError("expected operand", operand_tok)
+            return CondUnary(
+                operator=first.text, operand=parse_word(operand_tok.text, line=operand_tok.line)
+            )
+        # Binary or single-word.
+        nxt = self._peek()
+        if (nxt.kind is TokenKind.WORD and nxt.text in _BINARY_COND_OPS) or (
+            nxt.kind is TokenKind.OPERATOR and nxt.text in {"<", ">"}
+        ):
+            op_tok = self._next()
+            right_tok = self._next()
+            if right_tok.kind is not TokenKind.WORD:
+                raise ParseError("expected right operand", right_tok)
+            return CondBinary(
+                operator=op_tok.text,
+                left=parse_word(first.text, line=first.line),
+                right=parse_word(right_tok.text, line=right_tok.line),
+            )
+        # Single word: truthy if non-empty.
+        return CondUnary(operator="-n", operand=parse_word(first.text, line=first.line))
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _try_parse_assignment(tok: Token) -> Assignment | None:
+    """Detect ``NAME=VALUE`` / ``NAME+=VALUE`` shapes from a single word token."""
+    text = tok.text
+    if not text:
+        return None
+    if not (text[0].isalpha() or text[0] == "_"):
+        return None
+    i = 1
+    while i < len(text) and (text[i].isalnum() or text[i] == "_"):
+        i += 1
+    if i >= len(text):
+        return None
+    append = False
+    if text[i] == "+" and i + 1 < len(text) and text[i + 1] == "=":
+        append = True
+        eq = i + 1
+    elif text[i] == "=":
+        eq = i
+    else:
+        return None
+    name = text[:i]
+    value_text = text[eq + 1 :]
+    value = parse_word(value_text, line=tok.line) if value_text else None
+    return Assignment(name=name, value=value, append=append, line=tok.line)
+
+
+def parse(source: str) -> Script:
+    """Top-level convenience wrapper: source text -> ``Script`` AST."""
+    return Parser(source).parse()
+
+
+__all__ = ["ParseError", "Parser", "parse"]
+
+
+_ = Arithmetic  # silence unused-import for type-only forward references

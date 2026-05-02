@@ -1,0 +1,410 @@
+"""Bash lexer.
+
+The lexer produces a flat token stream that the parser consumes. Words keep
+their raw text including quotes and dollar expansions; word-internal structure
+(``${var}`` / ``$(cmd)`` / ``"..."``) is parsed lazily by ``WordParser`` when
+the parser asks for it.
+
+Why split it this way: bash word-splitting rules depend on context (inside
+``[[ ]]`` or ``case`` patterns the rules differ). Keeping the lexer dumb about
+words and letting the parser drive expansion parsing makes the code easier to
+reason about than trying to lex everything eagerly.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import Enum, auto
+
+
+class TokenKind(Enum):
+    WORD = auto()  # raw word text including quotes / expansions
+    OPERATOR = auto()  # |, ||, &, &&, ;, ;;, (, ), <, >, >>, <<, <<<, etc.
+    NEWLINE = auto()  # \n - statement terminator
+    IO_NUMBER = auto()  # leading FD, e.g. 2 in 2>file
+    KEYWORD = auto()  # if/then/else/fi/for/while/etc. (resolved by parser)
+    EOF = auto()
+
+
+@dataclass(slots=True)
+class Token:
+    kind: TokenKind
+    text: str
+    line: int
+    column: int
+
+
+class LexError(Exception):
+    """Raised on unrecoverable lexer errors (unterminated quotes, etc.)."""
+
+    def __init__(self, message: str, line: int, column: int) -> None:
+        super().__init__(f"line {line}:{column}: {message}")
+        self.line = line
+        self.column = column
+
+
+# Two-character operators must be checked before single-character ones.
+_TWO_CHAR_OPS = (
+    "&&",
+    "||",
+    ">>",
+    "<<",
+    ">|",
+    "<&",
+    ">&",
+    "<>",
+    ";;",
+    "&>",
+    "|&",
+)
+_THREE_CHAR_OPS = ("<<<", "<<-", "&>>", ";;&")
+_SINGLE_CHAR_OPS = "|&;()<>"
+
+
+class Lexer:
+    """Hand-written, character-by-character bash lexer.
+
+    Iteration model: ``next_token()`` returns the next token; callers loop
+    until ``EOF``. ``peek_token()`` is a one-token lookahead.
+    """
+
+    __slots__ = ("_col", "_line", "_peeked", "_pos", "source")
+
+    def __init__(self, source: str) -> None:
+        self.source = source
+        self._pos = 0
+        self._line = 1
+        self._col = 1
+        self._peeked: Token | None = None
+
+    # ------------------------------------------------------------------ char IO
+    def _eof(self) -> bool:
+        return self._pos >= len(self.source)
+
+    def _peek_char(self, offset: int = 0) -> str:
+        i = self._pos + offset
+        if i >= len(self.source):
+            return ""
+        return self.source[i]
+
+    def _advance(self) -> str:
+        ch = self.source[self._pos]
+        self._pos += 1
+        if ch == "\n":
+            self._line += 1
+            self._col = 1
+        else:
+            self._col += 1
+        return ch
+
+    def _starts_with(self, s: str) -> bool:
+        return self.source.startswith(s, self._pos)
+
+    # -------------------------------------------------------------- public API
+    def peek_token(self) -> Token:
+        if self._peeked is None:
+            self._peeked = self._read_token()
+        return self._peeked
+
+    def next_token(self) -> Token:
+        if self._peeked is not None:
+            t = self._peeked
+            self._peeked = None
+            return t
+        return self._read_token()
+
+    # ------------------------------------------------------------------ engine
+    def _read_token(self) -> Token:
+        self._skip_whitespace_and_comments()
+        if self._eof():
+            return Token(TokenKind.EOF, "", self._line, self._col)
+
+        line, col = self._line, self._col
+        ch = self._peek_char()
+
+        if ch == "\n":
+            self._advance()
+            return Token(TokenKind.NEWLINE, "\n", line, col)
+
+        # \\\n is a line continuation: silently consume.
+        if ch == "\\" and self._peek_char(1) == "\n":
+            self._advance()
+            self._advance()
+            return self._read_token()
+
+        # ((expr)) - arithmetic command. Capture as a single OPERATOR token so
+        # the parser hands the raw text to the arithmetic parser (preserving
+        # operators that the lexer doesn't otherwise tokenize, like ``>=``).
+        if ch == "(" and self._peek_char(1) == "(":
+            return self._read_arith_command_token(line, col)
+        # [[ ... ]] - conditional expression keyword. Two-char keyword.
+        if ch == "[" and self._peek_char(1) == "[":
+            self._advance()
+            self._advance()
+            return Token(TokenKind.WORD, "[[", line, col)
+        if ch == "]" and self._peek_char(1) == "]":
+            self._advance()
+            self._advance()
+            return Token(TokenKind.WORD, "]]", line, col)
+        # Operators (longest match wins).
+        for op in _THREE_CHAR_OPS:
+            if self._starts_with(op):
+                for _ in op:
+                    self._advance()
+                return Token(TokenKind.OPERATOR, op, line, col)
+        for op in _TWO_CHAR_OPS:
+            if self._starts_with(op):
+                for _ in op:
+                    self._advance()
+                return Token(TokenKind.OPERATOR, op, line, col)
+        if ch in _SINGLE_CHAR_OPS:
+            self._advance()
+            return Token(TokenKind.OPERATOR, ch, line, col)
+
+        # IO_NUMBER: digits followed by < or > (no intervening whitespace).
+        if ch.isdigit():
+            j = self._pos
+            while j < len(self.source) and self.source[j].isdigit():
+                j += 1
+            if j < len(self.source) and self.source[j] in "<>":
+                num = self.source[self._pos : j]
+                for _ in num:
+                    self._advance()
+                return Token(TokenKind.IO_NUMBER, num, line, col)
+
+        # Word.
+        text = self._read_word()
+        return Token(TokenKind.WORD, text, line, col)
+
+    # ----------------------------------------------------------- char-class IO
+    def _skip_whitespace_and_comments(self) -> None:
+        while not self._eof():
+            ch = self._peek_char()
+            if ch in (" ", "\t"):
+                self._advance()
+            elif ch == "#":
+                while not self._eof() and self._peek_char() != "\n":
+                    self._advance()
+            else:
+                return
+
+    def _read_word(self) -> str:
+        """Read a single word, preserving quotes and ``$...`` expansions verbatim."""
+        out: list[str] = []
+        while not self._eof():
+            ch = self._peek_char()
+            if ch in (" ", "\t", "\n"):
+                break
+            if ch in _SINGLE_CHAR_OPS:
+                break
+            # Backslash escape outside any quote.
+            if ch == "\\":
+                out.append(self._advance())
+                if not self._eof():
+                    out.append(self._advance())
+                continue
+            if ch == "'":
+                out.append(self._read_single_quoted())
+                continue
+            if ch == '"':
+                out.append(self._read_double_quoted())
+                continue
+            if ch == "$":
+                out.append(self._read_dollar())
+                continue
+            if ch == "`":
+                out.append(self._read_backtick())
+                continue
+            out.append(self._advance())
+        return "".join(out)
+
+    def _read_single_quoted(self) -> str:
+        start_line, start_col = self._line, self._col
+        out = [self._advance()]  # opening '
+        while not self._eof():
+            ch = self._advance()
+            out.append(ch)
+            if ch == "'":
+                return "".join(out)
+        raise LexError("unterminated single-quoted string", start_line, start_col)
+
+    def _read_double_quoted(self) -> str:
+        start_line, start_col = self._line, self._col
+        out = [self._advance()]  # opening "
+        while not self._eof():
+            ch = self._peek_char()
+            if ch == "\\":
+                out.append(self._advance())
+                if not self._eof():
+                    out.append(self._advance())
+                continue
+            if ch == "$":
+                out.append(self._read_dollar())
+                continue
+            if ch == "`":
+                out.append(self._read_backtick())
+                continue
+            out.append(self._advance())
+            if ch == '"':
+                return "".join(out)
+        raise LexError("unterminated double-quoted string", start_line, start_col)
+
+    def _read_dollar(self) -> str:
+        """Read ``$``-introduced expansions including their balanced wrappers."""
+        out = [self._advance()]  # $
+        if self._eof():
+            return "".join(out)
+        nxt = self._peek_char()
+        if nxt == "{":
+            out.append(self._read_balanced("{", "}"))
+            return "".join(out)
+        if nxt == "(":
+            # $(( ... )) vs $( ... )
+            if self._peek_char(1) == "(":
+                out.append(self._read_double_paren())
+                return "".join(out)
+            out.append(self._read_balanced("(", ")"))
+            return "".join(out)
+        # $VAR / $1 / $? - read identifier or special.
+        if nxt.isalpha() or nxt == "_":
+            while not self._eof() and (self._peek_char().isalnum() or self._peek_char() == "_"):
+                out.append(self._advance())
+        elif nxt.isdigit() or nxt in "@*#?-$!":
+            out.append(self._advance())
+        return "".join(out)
+
+    def _read_backtick(self) -> str:
+        start_line, start_col = self._line, self._col
+        out = [self._advance()]  # opening `
+        while not self._eof():
+            ch = self._peek_char()
+            if ch == "\\":
+                out.append(self._advance())
+                if not self._eof():
+                    out.append(self._advance())
+                continue
+            out.append(self._advance())
+            if ch == "`":
+                return "".join(out)
+        raise LexError("unterminated backtick command substitution", start_line, start_col)
+
+    def _read_balanced(self, open_ch: str, close_ch: str) -> str:
+        """Consume opening and matching close, respecting nested quotes/expansions."""
+        start_line, start_col = self._line, self._col
+        out = [self._advance()]  # consume opener
+        depth = 1
+        while not self._eof() and depth > 0:
+            ch = self._peek_char()
+            if ch == "\\":
+                out.append(self._advance())
+                if not self._eof():
+                    out.append(self._advance())
+                continue
+            if ch == "'":
+                out.append(self._read_single_quoted())
+                continue
+            if ch == '"':
+                out.append(self._read_double_quoted())
+                continue
+            if ch == "$":
+                out.append(self._read_dollar())
+                continue
+            if ch == "`":
+                out.append(self._read_backtick())
+                continue
+            if ch == open_ch:
+                depth += 1
+            elif ch == close_ch:
+                depth -= 1
+                if depth == 0:
+                    out.append(self._advance())
+                    return "".join(out)
+            out.append(self._advance())
+        raise LexError(f"unterminated {open_ch}...{close_ch}", start_line, start_col)
+
+    def _read_arith_command_token(self, line: int, col: int) -> Token:
+        """Read ``(( ... ))`` as a single OPERATOR token with the raw body."""
+        start_line, start_col = line, col
+        self._advance()  # first (
+        self._advance()  # second (
+        body_start = self._pos
+        depth = 1
+        while not self._eof() and depth > 0:
+            ch = self._peek_char()
+            if ch == "\\" and not self._eof():
+                self._advance()
+                if not self._eof():
+                    self._advance()
+                continue
+            if ch == "'":
+                self._read_single_quoted()
+                continue
+            if ch == '"':
+                self._read_double_quoted()
+                continue
+            if ch == "$":
+                self._read_dollar()
+                continue
+            if ch == "(":
+                depth += 1
+                self._advance()
+                continue
+            if ch == ")":
+                if depth == 1 and self._peek_char(1) == ")":
+                    body = self.source[body_start : self._pos]
+                    self._advance()
+                    self._advance()
+                    return Token(TokenKind.OPERATOR, f"(({body}))", start_line, start_col)
+                depth -= 1
+                self._advance()
+                continue
+            self._advance()
+        raise LexError("unterminated (( ... ))", start_line, start_col)
+
+    def _read_double_paren(self) -> str:
+        """Read ``(( ... ))`` for ``$((...))`` arithmetic expansion."""
+        start_line, start_col = self._line, self._col
+        out = [self._advance(), self._advance()]  # ((
+        depth = 1
+        while not self._eof() and depth > 0:
+            ch = self._peek_char()
+            if ch == "\\":
+                out.append(self._advance())
+                if not self._eof():
+                    out.append(self._advance())
+                continue
+            if ch == "'":
+                out.append(self._read_single_quoted())
+                continue
+            if ch == '"':
+                out.append(self._read_double_quoted())
+                continue
+            if ch == "$":
+                out.append(self._read_dollar())
+                continue
+            if ch == "(":
+                depth += 1
+                out.append(self._advance())
+                continue
+            if ch == ")":
+                # )) closes; lone ) is a nested group.
+                if self._peek_char(1) == ")" and depth == 1:
+                    out.append(self._advance())
+                    out.append(self._advance())
+                    return "".join(out)
+                depth -= 1
+                out.append(self._advance())
+                continue
+            out.append(self._advance())
+        raise LexError("unterminated $((...))", start_line, start_col)
+
+
+def tokenize(source: str) -> list[Token]:
+    """Eagerly tokenize a whole script. Useful for tests and debugging."""
+    lex = Lexer(source)
+    out: list[Token] = []
+    while True:
+        tok = lex.next_token()
+        out.append(tok)
+        if tok.kind is TokenKind.EOF:
+            return out
