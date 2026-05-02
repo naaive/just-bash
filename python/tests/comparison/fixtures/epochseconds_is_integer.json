@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "n=$EPOCHSECONDS\n[[ \"$n\" =~ ^[0-9]+$ ]] && echo \"ok\" || echo \"bad\"",
+  "stderr": "",
+  "stdout": "ok\n"
+}

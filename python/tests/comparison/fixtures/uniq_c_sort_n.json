@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "text=$'apple\\nbanana\\napple\\ncherry\\nbanana\\napple\\ndate'\necho \"$text\" | sort | uniq -c | sort -nr",
+  "stderr": "",
+  "stdout": "      3 apple\n      2 banana\n      1 date\n      1 cherry\n"
+}

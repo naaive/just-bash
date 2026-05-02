@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "basename /a/b/c.txt\nbasename /a/b/c.txt .txt\nbasename /tmp/hello.tar.gz .tar.gz",
+  "stderr": "",
+  "stdout": "c.txt\nc\nhello\n"
+}

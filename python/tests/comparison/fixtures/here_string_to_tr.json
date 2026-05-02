@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "s=\"HELLO WORLD\"\nresult=$(tr 'A-Z' 'a-z' <<< \"$s\")\necho \"[$result]\"",
+  "stderr": "",
+  "stdout": "[hello world]\n"
+}

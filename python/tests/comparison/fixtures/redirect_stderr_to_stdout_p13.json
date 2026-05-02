@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "{ echo out; echo err >&2; } 2>&1 | sort",
+  "stderr": "",
+  "stdout": "err\nout\n"
+}

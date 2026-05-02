@@ -1,0 +1,7 @@
+{
+  "exitCode": 1,
+  "files": {},
+  "script": "true && echo ok\nfalse && echo fail",
+  "stderr": "",
+  "stdout": "ok\n"
+}

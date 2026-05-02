@@ -21,6 +21,7 @@ from just_bash.commands import (
     phase10,
     phase11,
     phase12,
+    phase13,
     sed_cmd,
     text_utils,
 )
@@ -273,6 +274,42 @@ def default_registry() -> dict[str, CommandImpl]:
             "runuser": phase12.cmd_runuser,
             "su": phase12.cmd_su,
             "sudo": phase12.cmd_sudo,
+        }
+    )
+    # Phase 13: network / crypto / binary-tool stubs.
+    base.update(
+        {
+            "netstat": phase13.cmd_netstat,
+            "ss": phase13.cmd_ss,
+            "route": phase13.cmd_route,
+            "arp": phase13.cmd_arp,
+            "traceroute": phase13.cmd_traceroute,
+            "mtr": phase13.cmd_mtr,
+            "nc": phase13.cmd_nc,
+            "ncat": phase13.cmd_ncat,
+            "socat": phase13.cmd_socat,
+            "telnet": phase13.cmd_telnet,
+            "ftp": phase13.cmd_ftp,
+            "openssl": phase13.cmd_openssl,
+            "gpg": phase13.cmd_gpg,
+            "ssh-keygen": phase13.cmd_ssh_keygen,
+            "ssh-add": phase13.cmd_ssh_add,
+            "ssh-agent": phase13.cmd_ssh_agent,
+            "objdump": phase13.cmd_objdump,
+            "nm": phase13.cmd_nm,
+            "strip": phase13.cmd_strip,
+            "ldd": phase13.cmd_ldd,
+            "ldconfig": phase13.cmd_ldconfig,
+            "addr2line": phase13.cmd_addr2line,
+            "c++filt": phase13.cmd_cppfilt,
+            "cppfilt": phase13.cmd_cppfilt,
+            "ar": phase13.cmd_ar,
+            "patch": phase13.cmd_patch,
+            "diff3": phase13.cmd_diff3,
+            "logger": phase13.cmd_logger,
+            "systemctl": phase13.cmd_systemctl,
+            "journalctl": phase13.cmd_journalctl,
+            "service": phase13.cmd_service,
         }
     )
     return base

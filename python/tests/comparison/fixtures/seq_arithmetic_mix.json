@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "sum=0\nfor n in $(seq 1 10); do\n  sum=$((sum + n))\ndone\necho \"$sum\"",
+  "stderr": "",
+  "stdout": "55\n"
+}

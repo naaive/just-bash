@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "s=\"key=value123\"\nif [[ \"$s\" =~ ^[a-z]+=[a-z0-9]+$ ]]; then\n  echo \"matched\"\nfi",
+  "stderr": "",
+  "stdout": "matched\n"
+}

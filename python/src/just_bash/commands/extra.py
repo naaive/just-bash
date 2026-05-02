@@ -294,10 +294,45 @@ def cmd_diff(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
         return 1
     if flags.get("-u"):
         diff = difflib.unified_diff(ta, tb, fromfile=a, tofile=b, lineterm="")
+        write_out(io_ctx, "\n".join(diff) + "\n")
     else:
-        diff = difflib.context_diff(ta, tb, fromfile=a, tofile=b, lineterm="")
-    write_out(io_ctx, "\n".join(diff) + "\n")
+        write_out(io_ctx, _normal_diff(ta, tb))
     return 1
+
+
+def _normal_diff(a: list[str], b: list[str]) -> str:
+    """Emit POSIX ``diff`` ``Na,bcMc,d`` style output (the default format)."""
+    matcher = difflib.SequenceMatcher(a=a, b=b, autojunk=False)
+    parts: list[str] = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            continue
+        a_range = _diff_range(i1 + 1, i2)
+        b_range = _diff_range(j1 + 1, j2)
+        if tag == "replace":
+            parts.append(f"{a_range}c{b_range}\n")
+            for line in a[i1:i2]:
+                parts.append(f"< {line}" if line.endswith("\n") else f"< {line}\n")
+            parts.append("---\n")
+            for line in b[j1:j2]:
+                parts.append(f"> {line}" if line.endswith("\n") else f"> {line}\n")
+        elif tag == "delete":
+            parts.append(f"{a_range}d{j1}\n")
+            for line in a[i1:i2]:
+                parts.append(f"< {line}" if line.endswith("\n") else f"< {line}\n")
+        elif tag == "insert":
+            parts.append(f"{i1}a{b_range}\n")
+            for line in b[j1:j2]:
+                parts.append(f"> {line}" if line.endswith("\n") else f"> {line}\n")
+    return "".join(parts)
+
+
+def _diff_range(start: int, end: int) -> str:
+    if start >= end:
+        return str(end)
+    if start == end:
+        return str(start)
+    return f"{start},{end}"
 
 
 # ---------------------------------------------------------------------------

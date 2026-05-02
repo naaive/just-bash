@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "echo -e 'tab\\there\\nline2'",
+  "stderr": "",
+  "stdout": "tab\there\nline2\n"
+}

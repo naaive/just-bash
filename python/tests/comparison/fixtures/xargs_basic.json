@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf 'a\\nb\\nc\\n' | xargs echo",
+  "stderr": "",
+  "stdout": "a b c\n"
+}

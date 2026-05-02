@@ -111,6 +111,16 @@ class Environment:
             return str(int(time.monotonic() - self._start_time))
         if name == "RANDOM":
             return str(self._rng.randrange(0, 32768))
+        if name == "EPOCHSECONDS":
+            import time
+
+            return str(int(time.time()))
+        if name == "EPOCHREALTIME":
+            import time
+
+            return f"{time.time():.6f}"
+        if name == "SRANDOM":
+            return str(self._rng.randrange(0, 2**32))
         if name == "PIPESTATUS":
             return str(self.last_pipeline_status[-1]) if self.last_pipeline_status else "0"
         v = self._lookup(name)

@@ -61,7 +61,9 @@ def cmd_ls(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
         paths = [interp.fs.cwd]
     show_hidden = bool(flags.get("-a") or flags.get("-A"))
     long_form = bool(flags.get("-l"))
-    one_per_line = bool(flags.get("-1") or long_form)
+    # Real ``ls`` switches to one-entry-per-line when stdout isn't a TTY;
+    # the sandbox never has a TTY so the one-per-line form is the default.
+    one_per_line = True
     classify = bool(flags.get("-F"))
     rc = 0
 

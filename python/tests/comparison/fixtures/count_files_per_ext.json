@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "mkdir -p /tmp/ext\ntouch /tmp/ext/a.txt /tmp/ext/b.txt /tmp/ext/c.md /tmp/ext/d.md /tmp/ext/e.md /tmp/ext/f.json\nls /tmp/ext | awk -F. '{print $2}' | sort | uniq -c | sort -nr | sed 's/^ *//'",
+  "stderr": "",
+  "stdout": "3 md\n2 txt\n1 json\n"
+}
