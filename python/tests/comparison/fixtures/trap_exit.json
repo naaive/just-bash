@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "trap 'echo bye' EXIT; echo hello",
+  "stderr": "",
+  "stdout": "hello\nbye\n"
+}

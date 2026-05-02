@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "declare -A m; m[a]=1; m[b]=2; m[c]=3; for k in \"${!m[@]}\"; do echo \"$k=${m[$k]}\"; done | sort",
+  "stderr": "",
+  "stdout": "a=1\nb=2\nc=3\n"
+}

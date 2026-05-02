@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf 'foo\\nbar\\n' | sed 's/foo/REPL/; t end; p; :end'",
+  "stderr": "",
+  "stdout": "REPL\nbar\nbar\n"
+}

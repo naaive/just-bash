@@ -57,6 +57,17 @@ def default_builtins() -> dict[str, Builtin]:
         "declare": _b_declare,
         "typeset": _b_declare,
         "trap": _b_trap,
+        "pushd": _b_pushd,
+        "popd": _b_popd,
+        "dirs": _b_dirs,
+        "alias": _b_alias,
+        "unalias": _b_unalias,
+        "shopt": _b_shopt,
+        "time": _b_time,
+        "umask": _b_umask,
+        "ulimit": _b_ulimit,
+        "history": _b_history,
+        "help": _b_help,
     }
 
 
@@ -594,6 +605,153 @@ def _b_trap(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
             interp.env.traps.pop(sig_name, None)
         else:
             interp.env.traps[sig_name] = handler
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Phase-4 builtins
+# ---------------------------------------------------------------------------
+
+
+_DIR_STACK: list[str] = []
+_ALIASES: dict[str, str] = {}
+_SHOPT: dict[str, bool] = {}
+
+
+def _b_pushd(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
+    """``pushd DIR`` - save current dir on the stack and chdir to ``DIR``.
+
+    Bash semantics: the directory stack always has the current directory at
+    its head. With no argument, swap the top two entries.
+    """
+    args = argv[1:]
+    # Lazy-init the stack with the current directory.
+    if not _DIR_STACK:
+        _DIR_STACK.append(interp.fs.cwd)
+    if not args:
+        if len(_DIR_STACK) < 2:
+            io_ctx.stderr.write(b"pushd: no other directory\n")
+            return 1
+        _DIR_STACK[0], _DIR_STACK[1] = _DIR_STACK[1], _DIR_STACK[0]
+        try:
+            interp.fs.chdir(_DIR_STACK[0])
+        except FsError as e:
+            io_ctx.stderr.write(f"pushd: {e}\n".encode())
+            return 1
+        io_ctx.stdout.write((" ".join(_DIR_STACK) + "\n").encode())
+        return 0
+    target = args[0]
+    try:
+        interp.fs.chdir(target)
+    except FsError as e:
+        io_ctx.stderr.write(f"pushd: {e}\n".encode())
+        return 1
+    _DIR_STACK.insert(0, interp.fs.cwd)
+    io_ctx.stdout.write((" ".join(_DIR_STACK) + "\n").encode())
+    return 0
+
+
+def _b_popd(interp: Interpreter, _argv: list[str], io_ctx: IO) -> int:
+    if len(_DIR_STACK) < 2:
+        io_ctx.stderr.write(b"popd: directory stack empty\n")
+        return 1
+    _DIR_STACK.pop(0)
+    try:
+        interp.fs.chdir(_DIR_STACK[0])
+    except FsError as e:
+        io_ctx.stderr.write(f"popd: {e}\n".encode())
+        return 1
+    io_ctx.stdout.write((" ".join(_DIR_STACK) + "\n").encode())
+    return 0
+
+
+def _b_dirs(interp: Interpreter, _argv: list[str], io_ctx: IO) -> int:
+    stack = _DIR_STACK if _DIR_STACK else [interp.fs.cwd]
+    io_ctx.stdout.write((" ".join(stack) + "\n").encode())
+    return 0
+
+
+def _b_alias(_interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
+    args = argv[1:]
+    if not args:
+        for k, v in sorted(_ALIASES.items()):
+            io_ctx.stdout.write(f"alias {k}='{v}'\n".encode())
+        return 0
+    rc = 0
+    for arg in args:
+        if "=" in arg:
+            name, _, value = arg.partition("=")
+            _ALIASES[name] = value.strip("'\"")
+        else:
+            v = _ALIASES.get(arg)
+            if v is None:
+                io_ctx.stderr.write(f"alias: {arg}: not found\n".encode())
+                rc = 1
+            else:
+                io_ctx.stdout.write(f"alias {arg}='{v}'\n".encode())
+    return rc
+
+
+def _b_unalias(_interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
+    rc = 0
+    for arg in argv[1:]:
+        if arg in _ALIASES:
+            del _ALIASES[arg]
+        else:
+            io_ctx.stderr.write(f"unalias: {arg}: not found\n".encode())
+            rc = 1
+    return rc
+
+
+def _b_shopt(_interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
+    args = argv[1:]
+    set_mode = True
+    if args and args[0] == "-s":
+        set_mode = True
+        args = args[1:]
+    elif args and args[0] == "-u":
+        set_mode = False
+        args = args[1:]
+    if not args:
+        for k, v in sorted(_SHOPT.items()):
+            io_ctx.stdout.write(f"{k:<30}\t{'on' if v else 'off'}\n".encode())
+        return 0
+    for opt in args:
+        _SHOPT[opt] = set_mode
+    return 0
+
+
+def _b_time(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
+    """``time CMD ARGS`` - run cmd, emit pseudo-real/user/sys lines on stderr.
+
+    The sandbox is deterministic so we emit zeros; the practical purpose is
+    to allow scripts that use ``time foo`` not to break.
+    """
+    if len(argv) < 2:
+        io_ctx.stderr.write(b"\nreal\t0m0.000s\nuser\t0m0.000s\nsys\t0m0.000s\n")
+        return 0
+    rc = interp._dispatch(argv[1:], io_ctx)
+    io_ctx.stderr.write(b"\nreal\t0m0.000s\nuser\t0m0.000s\nsys\t0m0.000s\n")
+    return rc
+
+
+def _b_umask(_interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
+    if len(argv) == 1:
+        io_ctx.stdout.write(b"0022\n")
+    return 0
+
+
+def _b_ulimit(_interp: Interpreter, _argv: list[str], io_ctx: IO) -> int:
+    io_ctx.stdout.write(b"unlimited\n")
+    return 0
+
+
+def _b_history(_interp: Interpreter, _argv: list[str], _io: IO) -> int:
+    return 0
+
+
+def _b_help(_interp: Interpreter, _argv: list[str], io_ctx: IO) -> int:
+    io_ctx.stdout.write(b"GNU bash, sandboxed (just-bash-py): see README for supported builtins.\n")
     return 0
 
 

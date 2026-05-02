@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "echo file_{a,b,c}.txt",
+  "stderr": "",
+  "stdout": "file_a.txt file_b.txt file_c.txt\n"
+}

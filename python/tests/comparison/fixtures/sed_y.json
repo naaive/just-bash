@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "echo hello | sed 'y/aeiou/AEIOU/'",
+  "stderr": "",
+  "stdout": "hEllO\n"
+}

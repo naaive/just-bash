@@ -33,6 +33,24 @@ def eval_arith(interp: Interpreter, expr: Arithmetic | ArithExpr | None) -> int:
     if isinstance(expr, Arithmetic):
         if expr.expression is None:
             return 0
+        # If the source text contained ``$(...)`` or ``${...}`` shell
+        # expansions, the original parse couldn't fully resolve them. Re-run
+        # the word-expansion machinery on ``source_text`` so command
+        # substitutions / parameter expansions are resolved, then re-parse the
+        # arithmetic expression on the resulting numeric text.
+        src = expr.source_text or ""
+        if "$" in src or "`" in src:
+            from just_bash.interpreter.expansion import expand_word_no_split
+            from just_bash.parser.arithmetic_parser import parse_arith_text
+            from just_bash.parser.word_parser import parse_word
+
+            try:
+                resolved = expand_word_no_split(interp, parse_word(src))
+                reparsed = parse_arith_text(resolved)
+                return _eval(interp, reparsed.expression) if reparsed.expression else 0
+            except Exception:
+                # Fall through to the originally parsed AST.
+                pass
         return _eval(interp, expr.expression)
     return _eval(interp, expr)
 

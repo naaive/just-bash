@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf 'a\\tb\\n' | expand -t 4",
+  "stderr": "",
+  "stdout": "a   b\n"
+}

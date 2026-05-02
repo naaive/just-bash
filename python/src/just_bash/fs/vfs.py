@@ -60,6 +60,10 @@ class VirtualFs:
     def __init__(self) -> None:
         self.root = Directory(name="")
         self._cwd = "/"
+        # Pre-populate ``/dev/null`` and ``/tmp`` so common idioms work.
+        self.mkdir("/dev", parents=True, exist_ok=True)
+        self.write_file("/dev/null", b"")
+        self.mkdir("/tmp", parents=True, exist_ok=True)
 
     # --------------------------------------------------------------- cwd / pwd
     @property
@@ -192,7 +196,11 @@ class VirtualFs:
     def write_file(self, path: str, data: bytes | str, *, mode: int = 0o644) -> None:
         if isinstance(data, str):
             data = data.encode("utf-8")
-        parent, name, node = self._walk(path)
+        absolute = self._resolve(path)
+        # ``/dev/null`` discards everything written to it.
+        if absolute == "/dev/null":
+            return
+        parent, name, node = self._walk(absolute)
         if node is None:
             parent.children[name] = File(name=name, content=data, mode=mode)
         elif isinstance(node, File):
@@ -204,7 +212,10 @@ class VirtualFs:
     def append_file(self, path: str, data: bytes | str) -> None:
         if isinstance(data, str):
             data = data.encode("utf-8")
-        parent, name, node = self._walk(path)
+        absolute = self._resolve(path)
+        if absolute == "/dev/null":
+            return
+        parent, name, node = self._walk(absolute)
         if node is None:
             parent.children[name] = File(name=name, content=data)
         elif isinstance(node, File):

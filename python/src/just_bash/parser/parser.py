@@ -479,6 +479,11 @@ class Parser:
     def _parse_for(self) -> For:
         line = self._peek().line
         self._consume(TokenKind.WORD, "for")
+        # Detect C-style ``for ((init; cond; step))`` form. The lexer
+        # already collapsed ``(( ... ))`` into a single OPERATOR token.
+        nxt = self._peek()
+        if nxt.kind is TokenKind.OPERATOR and nxt.text.startswith("((") and nxt.text.endswith("))"):
+            return self._parse_c_for(line)
         var_tok = self._next()
         if var_tok.kind is not TokenKind.WORD:
             raise ParseError("expected for-loop variable", var_tok)
@@ -520,6 +525,71 @@ class Parser:
             line=line,
             redirections=self._parse_trailing_redirections(),
         )
+
+    def _parse_c_for(self, line: int) -> For:
+        """Parse ``for ((init; cond; step)); do ... done``.
+
+        We model it as a regular ``For`` whose body is wrapped: the init runs
+        once before the loop via a synthetic prologue statement, the cond is
+        re-checked each iteration, and the step is appended to the body. To
+        keep the AST shape compact we synthesize a ``While`` and reuse the
+        existing executor instead.
+        """
+        cstyle_tok = self._next()
+        # Peel off the ``((...))`` wrappers.
+        body_text = cstyle_tok.text[2:-2]
+        # Three semicolon-delimited expressions.
+        sections = _split_top_arith(body_text)
+        if len(sections) != 3:
+            raise ParseError("expected three ;-separated arithmetic expressions", cstyle_tok)
+        init_text, cond_text, step_text = sections
+        from just_bash.ast.nodes import (
+            ArithmeticCommand as _AC,
+        )
+        from just_bash.ast.nodes import (
+            Pipeline as _Pi,
+        )
+        from just_bash.ast.nodes import (
+            Statement as _St,
+        )
+
+        def _arith_stmt(text: str, default: str = "1") -> _St:
+            text = text.strip() or default
+            expr = parse_arith_text(text)
+            cmd = _AC(expression=expr, line=line)
+            return _St(pipelines=[_Pi(commands=[cmd], line=line)], line=line)
+
+        init_stmt = _arith_stmt(init_text, default="0")
+        cond_stmt = _arith_stmt(cond_text, default="1")
+        step_stmt = _arith_stmt(step_text, default="0")
+        # Skip optional ``;`` and newlines, expect ``do``.
+        self._skip_newlines()
+        if self._peek().kind is TokenKind.OPERATOR and self._peek().text == ";":
+            self._next()
+        self._skip_newlines()
+        self._consume(TokenKind.WORD, "do")
+        body = self._parse_compound_list_until({"done"})
+        self._consume(TokenKind.WORD, "done")
+        # Append step to body; wrap init+While inside a Group so the For-like
+        # node can reuse the existing for-execution path. Easier: return a
+        # synthetic ``Group`` containing init then While(cond, body+step).
+        from just_bash.ast.nodes import Group as _Gr
+        from just_bash.ast.nodes import While as _Wh
+
+        wh = _Wh(
+            condition=[cond_stmt],
+            body=[*body, step_stmt],
+            line=line,
+        )
+        wh_stmt = _St(pipelines=[_Pi(commands=[wh], line=line)], line=line)
+        group = _Gr(body=[init_stmt, wh_stmt], line=line)
+        # We have to return a For-typed node; wrap inside a one-shot ``For``
+        # whose body evaluates the synthesized group. Use the existing
+        # synthesized statement wiring by treating this as ``for _ in _; do
+        # GROUP; done`` with a single iteration -> easier: just return Group.
+        # The caller stores it in a Pipeline.commands list, which accepts any
+        # CompoundCommand. Cast accordingly.
+        return group  # type: ignore[return-value]
 
     # ------------------------------------------------------------ while/until
     def _parse_while(self) -> While:
@@ -836,6 +906,47 @@ def _try_parse_assignment(tok: Token) -> Assignment | None:
     if subscript is not None:
         a.subscript = subscript
     return a
+
+
+def _split_top_arith(text: str) -> list[str]:
+    """Split ``init; cond; step`` honouring nested parens / quotes."""
+    parts: list[str] = []
+    depth = 0
+    cur: list[str] = []
+    in_q = False
+    quote = ""
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if in_q:
+            cur.append(ch)
+            if ch == "\\" and i + 1 < len(text):
+                cur.append(text[i + 1])
+                i += 2
+                continue
+            if ch == quote:
+                in_q = False
+            i += 1
+            continue
+        if ch in ("'", '"'):
+            in_q = True
+            quote = ch
+            cur.append(ch)
+        elif ch == "(":
+            depth += 1
+            cur.append(ch)
+        elif ch == ")":
+            depth -= 1
+            cur.append(ch)
+        elif ch == ";" and depth == 0:
+            parts.append("".join(cur))
+            cur = []
+        else:
+            cur.append(ch)
+        i += 1
+    if cur:
+        parts.append("".join(cur))
+    return parts
 
 
 def parse(source: str) -> Script:

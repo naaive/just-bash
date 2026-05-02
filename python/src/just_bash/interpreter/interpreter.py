@@ -325,19 +325,38 @@ class Interpreter:
         return 0
 
     def _run_subshell(self, node: Subshell, io_ctx: IO) -> int:
-        # Subshell isolation: snapshot env state, execute, restore.
-        saved_vars = {name: self.env.get_var(name) for name in self.env.all_var_names()}
+        """Run a ``( ... )`` subshell with isolated env / cwd / arrays.
+
+        The save snapshots VALUES (not references) so mutations inside the
+        subshell don't leak through the saved record back into the parent.
+        """
+        from just_bash.interpreter.environment import Variable
+
+        saved: dict[str, Variable] = {}
+        for name in self.env.all_var_names():
+            v = self.env.get_var(name)
+            if v is None:
+                continue
+            saved[name] = Variable(
+                value=v.value,
+                exported=v.exported,
+                readonly=v.readonly,
+                array=list(v.array) if v.array is not None else None,
+                assoc=dict(v.assoc) if v.assoc is not None else None,
+            )
         saved_cwd = self.fs.cwd
+        saved_positional = list(self.env.positional)
         try:
             return self._exec_block(node.body, io_ctx)
         finally:
+            # Drop variables introduced inside the subshell.
             for name in list(self.env.all_var_names()):
-                if name not in saved_vars or saved_vars[name] is None:
+                if name not in saved:
                     self.env.unset(name)
-                else:
-                    v = saved_vars[name]
-                    assert v is not None
-                    self.env.set_var(name, v.value, exported=v.exported)
+            # Restore each saved variable to its snapshot.
+            for name, v in saved.items():
+                self.env.global_scope.vars[name] = v
+            self.env.positional = saved_positional
             with contextlib.suppress(OSError):
                 self.fs.chdir(saved_cwd)
 
@@ -518,11 +537,19 @@ class Interpreter:
             io_ctx.stdin = (path + "\n").encode("utf-8")
             return
         if op in (">", ">|"):
-            io_ctx.stdout = _RedirectingStream(self, path, append=False)
+            stream = _RedirectingStream(self, path, append=False)
+            if r.fd == 2:
+                io_ctx.stderr = stream
+            else:
+                io_ctx.stdout = stream
             writes.append((path, b"", False))
             return
         if op == ">>":
-            io_ctx.stdout = _RedirectingStream(self, path, append=True)
+            stream = _RedirectingStream(self, path, append=True)
+            if r.fd == 2:
+                io_ctx.stderr = stream
+            else:
+                io_ctx.stdout = stream
             writes.append((path, b"", True))
             return
         if op == "&>":
@@ -534,10 +561,6 @@ class Interpreter:
             stream = _RedirectingStream(self, path, append=True)
             io_ctx.stdout = stream
             io_ctx.stderr = stream
-            return
-        # 2>file - operator is ">" with fd=2.
-        if op == ">" and r.fd == 2:
-            io_ctx.stderr = _RedirectingStream(self, path, append=False)
             return
         # ``>&N`` / ``N>&M`` - duplicate / redirect by file-descriptor number.
         if op == ">&":

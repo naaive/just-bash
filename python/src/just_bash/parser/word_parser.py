@@ -427,8 +427,15 @@ def _parse_backtick(raw: str, start: int, line: int) -> tuple[int, CommandSubsti
 
 
 def _parse_arith(raw: str, start: int, line: int) -> tuple[int, ArithmeticExpansion]:
-    """``$(( expr ))`` arithmetic expansion."""
-    from just_bash.parser.arithmetic_parser import parse_arith_text
+    """``$(( expr ))`` arithmetic expansion.
+
+    If the inner contains shell expansions (``$(...)`` / ``$VAR``) that the
+    arithmetic parser can't lex, we store the source text without a parsed
+    expression; ``eval_arith`` re-expands it at runtime via the word
+    machinery and re-parses the resulting numeric text.
+    """
+    from just_bash.ast.nodes import Arithmetic, ArithNumber
+    from just_bash.parser.arithmetic_parser import ArithParseError, parse_arith_text
 
     n = len(raw)
     i = start + 3  # skip $((
@@ -444,8 +451,16 @@ def _parse_arith(raw: str, start: int, line: int) -> tuple[int, ArithmeticExpans
         elif ch == ")":
             if depth == 1 and i + 1 < n and raw[i + 1] == ")":
                 inner = raw[body_start:i]
-                expr = parse_arith_text(inner)
-                expr.line = line
+                try:
+                    expr = parse_arith_text(inner)
+                    expr.line = line
+                except ArithParseError:
+                    # Defer parsing to runtime by stashing only the text.
+                    expr = Arithmetic(
+                        line=line,
+                        expression=ArithNumber(value=0),
+                        source_text=inner,
+                    )
                 return i + 2, ArithmeticExpansion(line=line, expression=expr)
             depth -= 1
         i += 1

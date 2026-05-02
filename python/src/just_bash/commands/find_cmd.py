@@ -62,6 +62,7 @@ class _Entry:
 
 
 def _walk(interp: Interpreter, start: str) -> list[_Entry]:
+    """Enumerate entries via the FS facade so ``OverlayFs`` works too."""
     out: list[_Entry] = []
     try:
         node = interp.fs.stat(start)
@@ -79,12 +80,19 @@ def _walk(interp: Interpreter, start: str) -> list[_Entry]:
     )
     if not isinstance(node, Directory):
         return out
-    stack: list[tuple[str, Directory, int]] = [(start, node, 0)]
+    stack: list[tuple[str, int]] = [(start, 0)]
     while stack:
-        cur_path, cur, depth = stack.pop()
-        for name in sorted(cur.children):
-            child = cur.children[name]
+        cur_path, depth = stack.pop()
+        try:
+            names = interp.fs.listdir(cur_path)
+        except FsError:
+            continue
+        for name in names:
             child_path = path_utils.join(cur_path, name) if cur_path != "/" else "/" + name
+            try:
+                child = interp.fs.stat(child_path)
+            except FsError:
+                continue
             out.append(
                 _Entry(
                     path=child_path,
@@ -96,7 +104,7 @@ def _walk(interp: Interpreter, start: str) -> list[_Entry]:
                 )
             )
             if isinstance(child, Directory):
-                stack.append((child_path, child, depth + 1))
+                stack.append((child_path, depth + 1))
     return out
 
 

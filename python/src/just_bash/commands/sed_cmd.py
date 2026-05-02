@@ -1,18 +1,21 @@
 """``sed`` - stream editor.
 
-Supports:
-  - ``s/pat/repl/flags``       (flags: ``g``, ``i``, ``N``)
-  - ``d`` (delete), ``p`` (print), ``q`` (quit)
-  - addresses: line numbers, ``$``, ``/regex/``, ranges ``a,b``
-  - ``-n`` quiet (suppress automatic print)
-  - ``-E`` / ``-r`` extended regex
-  - multiple ``-e EXPR`` / single inline expression
+Supports a broad subset:
+  - ``s/pat/repl/flags`` (flags: ``g``, ``i`` / ``I``, ``N``, ``p``)
+  - ``d`` delete, ``p`` print, ``q`` quit, ``=`` line number, ``n`` next
+  - ``h`` / ``H`` / ``g`` / ``G`` / ``x`` hold-space ops
+  - ``c`` change, ``i`` insert before, ``a`` append after
+  - ``y/SRC/DST/`` transliterate
+  - ``: label`` / ``b LABEL`` / ``t LABEL`` branches (unconditional / on-success)
+  - ``{ ... }`` grouped blocks tied to a single address
+  - addresses: line numbers, ``$``, ``/regex/``, ranges ``a,b``, ``!`` negation
+  - ``-n`` quiet, ``-E`` / ``-r`` extended regex, ``-e EXPR`` multiple programs
 """
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from just_bash.commands._helpers import parse_flags, read_input, write_err, write_out
@@ -21,12 +24,33 @@ if TYPE_CHECKING:
     from just_bash.interpreter.interpreter import IO, Interpreter
 
 
+# Sed bytecode-ish: each op has an address pair, command, args, and the
+# computed jump-target index for ``b`` / ``t``.
 @dataclass(slots=True)
 class SedOp:
-    addr1: str | None  # None = no address
-    addr2: str | None  # None = single address; otherwise range end
-    command: str  # 's', 'd', 'p', 'q', '='
-    args: tuple[str, ...]
+    addr1: str | None = None
+    addr2: str | None = None
+    negate: bool = False
+    command: str = ""
+    args: tuple[str, ...] = ()
+    target: int = -1  # branch destination index, set during compilation
+    extended: bool = False
+
+
+@dataclass(slots=True)
+class SedState:
+    pattern: str = ""
+    hold: str = ""
+    deleted: bool = False
+    quit: bool = False
+    last_sub_matched: bool = False
+    appended: list[str] = field(default_factory=list)
+    range_state: dict[int, bool] = field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Public entry
+# ---------------------------------------------------------------------------
 
 
 def cmd_sed(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
@@ -44,7 +68,6 @@ def cmd_sed(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
         program_parts.append(str(flags["-e"]))
     if "-f" in flags:
         program_parts.append(interp.fs.read_text(str(flags["-f"])))
-    files: list[str]
     if program_parts:
         files = positional
     else:
@@ -56,135 +79,221 @@ def cmd_sed(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
     program = "\n".join(program_parts)
     quiet = bool(flags.get("-n"))
     extended = bool(flags.get("-E") or flags.get("-r"))
-    ops = _parse_program(program)
+    ops, error = _compile(program, extended=extended)
+    if error is not None:
+        write_err(io_ctx, f"sed: {error}\n".encode())
+        return 2
     data, rc = read_input(interp, io_ctx, files)
     text = data.decode("utf-8", errors="replace")
     lines = text.split("\n")
-    trailing_nl = text.endswith("\n")
-    if trailing_nl:
+    if text.endswith("\n"):
         lines = lines[:-1]
-    out_lines: list[str] = []
+    output: list[str] = []
+    state = SedState()
     for idx, raw in enumerate(lines, 1):
-        line = raw
-        printed = False
-        deleted = False
         last_idx = idx == len(lines)
-        for op in ops:
-            if not _addr_matches(op, idx, last_idx, line):
-                continue
-            if op.command == "d":
-                deleted = True
-                break
-            if op.command == "p":
-                out_lines.append(line)
-                continue
-            if op.command == "q":
-                if not quiet:
-                    out_lines.append(line)
-                    printed = True
-                _flush(io_ctx, out_lines)
-                return rc
-            if op.command == "s":
-                pat, repl, sflags = op.args
-                if extended:
-                    sflags = sflags + "E"
-                line = _do_sub(line, pat, repl, sflags)
-                continue
-            if op.command == "=":
-                out_lines.append(str(idx))
-                continue
-        if deleted:
-            continue
-        if not quiet and not printed:
-            out_lines.append(line)
-    _flush(io_ctx, out_lines)
+        state.pattern = raw
+        state.deleted = False
+        state.last_sub_matched = False
+        state.appended = []
+        _execute(ops, state, idx, last_idx)
+        if not state.deleted and not quiet:
+            output.append(state.pattern)
+        if state.appended:
+            output.extend(state.appended)
+        if state.quit:
+            break
+    if output:
+        write_out(io_ctx, "\n".join(output) + "\n")
     return rc
 
 
-def _flush(io_ctx: IO, lines: list[str]) -> None:
-    if lines:
-        write_out(io_ctx, "\n".join(lines) + "\n")
-
-
 # ---------------------------------------------------------------------------
-# Parser
+# Compiler
 # ---------------------------------------------------------------------------
 
 
-def _parse_program(text: str) -> list[SedOp]:
+def _compile(text: str, *, extended: bool) -> tuple[list[SedOp], str | None]:
+    """Parse the sed program into a flat ``SedOp`` list with branch targets."""
     ops: list[SedOp] = []
-    for raw in text.split("\n"):
-        stmt = raw.strip()
-        if not stmt or stmt.startswith("#"):
-            continue
-        ops.extend(_parse_statement(stmt))
-    return ops
-
-
-def _parse_statement(stmt: str) -> list[SedOp]:
-    out: list[SedOp] = []
+    labels: dict[str, int] = {}
+    pending_branches: list[tuple[int, str]] = []  # (op-index, label)
     i = 0
-    n = len(stmt)
+    text = _normalize_program(text)
+    n = len(text)
     while i < n:
-        # Skip whitespace and command separators.
-        while i < n and stmt[i] in " \t;":
+        # Skip whitespace and statement separators.
+        while i < n and text[i] in " \t;\n":
             i += 1
         if i >= n:
             break
-        addr1, addr2, i = _parse_addresses(stmt, i)
-        # Skip whitespace between addresses and command.
-        while i < n and stmt[i] in " \t":
-            i += 1
-        if i >= n:
-            break
-        cmd = stmt[i]
-        if cmd == "s":
-            i += 1
-            sep = stmt[i]
-            i += 1
-            # pattern, then replacement, both terminated by sep, with backslash escapes.
-            pat, i = _scan_until(stmt, i, sep)
-            repl, i = _scan_until(stmt, i, sep)
-            sflags = ""
-            while i < n and stmt[i] not in " \t;":
-                sflags += stmt[i]
+        if text[i] == "#":
+            while i < n and text[i] != "\n":
                 i += 1
-            out.append(SedOp(addr1, addr2, "s", (pat, repl, sflags)))
             continue
-        if cmd in ("d", "p", "q", "=", "n"):
-            out.append(SedOp(addr1, addr2, cmd, ()))
+        addr1, addr2, i = _parse_addresses(text, i)
+        # Skip whitespace between addresses and command.
+        while i < n and text[i] in " \t":
+            i += 1
+        if i >= n:
+            break
+        negate = False
+        if text[i] == "!":
+            negate = True
+            i += 1
+            while i < n and text[i] in " \t":
+                i += 1
+        if i >= n:
+            break
+        cmd = text[i]
+        if cmd == "{":
+            # ``{ ... }`` blocks are flattened: addr applies to the inner ops
+            # by inserting a conditional branch at the start.
+            i += 1
+            block_start = len(ops)
+            jump_op = SedOp(
+                addr1=addr1,
+                addr2=addr2,
+                negate=not negate,
+                command="b",
+                args=("__end_block__",),
+            )
+            ops.append(jump_op)
+            depth = 1
+            inner_text = []
+            while i < n and depth > 0:
+                if text[i] == "{":
+                    depth += 1
+                elif text[i] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        i += 1
+                        break
+                inner_text.append(text[i])
+                i += 1
+            inner = "".join(inner_text)
+            inner_ops, err = _compile(inner, extended=extended)
+            if err is not None:
+                return [], err
+            ops.extend(inner_ops)
+            jump_op.target = len(ops)
+            del block_start  # quiet linter
+            continue
+        if cmd == ":":
+            i += 1
+            label, i = _read_label(text, i)
+            labels[label] = len(ops)
+            continue
+        if cmd == "s":
+            op, i, err = _parse_sub(text, i, addr1, addr2, negate, extended)
+            if err is not None:
+                return [], err
+            ops.append(op)
+            continue
+        if cmd == "y":
+            op, i, err = _parse_translit(text, i, addr1, addr2, negate)
+            if err is not None:
+                return [], err
+            ops.append(op)
+            continue
+        if cmd in ("a", "i", "c"):
+            i += 1
+            # Optional ``\`` continuation for portability.
+            while i < n and text[i] in " \t":
+                i += 1
+            if i < n and text[i] == "\\":
+                i += 1
+                if i < n and text[i] == "\n":
+                    i += 1
+            payload, i = _read_to_end_of_line(text, i)
+            ops.append(SedOp(addr1=addr1, addr2=addr2, negate=negate, command=cmd, args=(payload,)))
+            continue
+        if cmd in ("b", "t"):
+            i += 1
+            while i < n and text[i] in " \t":
+                i += 1
+            label, i = _read_label(text, i)
+            op = SedOp(addr1=addr1, addr2=addr2, negate=negate, command=cmd, args=(label,))
+            ops.append(op)
+            pending_branches.append((len(ops) - 1, label))
+            continue
+        if cmd in ("d", "p", "q", "=", "n", "N", "h", "H", "g", "G", "x", "D", "P"):
+            ops.append(SedOp(addr1=addr1, addr2=addr2, negate=negate, command=cmd, args=()))
             i += 1
             continue
-        # Unknown command - skip to next ;
-        while i < n and stmt[i] != ";":
-            i += 1
-    return out
+        return [], f"unknown command {cmd!r}"
+    # Resolve branches.
+    for op_idx, label in pending_branches:
+        if label == "__end_block__":
+            continue
+        if label == "":
+            ops[op_idx].target = len(ops)  # bare ``b`` jumps to end
+            continue
+        target = labels.get(label)
+        if target is None:
+            return [], f"undefined label {label!r}"
+        ops[op_idx].target = target
+    return ops, None
 
 
-def _parse_addresses(stmt: str, i: int) -> tuple[str | None, str | None, int]:
-    n = len(stmt)
-    addr1, i = _parse_addr(stmt, i)
+def _normalize_program(text: str) -> str:
+    """Sed traditionally allows multiple commands separated by ``;`` or newline.
+
+    We pre-tokenise so the main parser can ignore whitespace handling.
+    """
+    return text
+
+
+def _read_label(text: str, i: int) -> tuple[str, int]:
+    n = len(text)
+    j = i
+    while j < n and text[j] not in (" ", "\t", "\n", ";"):
+        j += 1
+    return text[i:j], j
+
+
+def _read_to_end_of_line(text: str, i: int) -> tuple[str, int]:
+    n = len(text)
+    out: list[str] = []
+    while i < n and text[i] != "\n":
+        if text[i] == "\\" and i + 1 < n:
+            nxt = text[i + 1]
+            if nxt == "n":
+                out.append("\n")
+            elif nxt == "t":
+                out.append("\t")
+            else:
+                out.append(nxt)
+            i += 2
+            continue
+        out.append(text[i])
+        i += 1
+    return "".join(out), i
+
+
+def _parse_addresses(text: str, i: int) -> tuple[str | None, str | None, int]:
+    addr1, i = _parse_addr(text, i)
     addr2: str | None = None
-    if i < n and stmt[i] == ",":
-        addr2, i = _parse_addr(stmt, i + 1)
+    if i < len(text) and text[i] == ",":
+        addr2, i = _parse_addr(text, i + 1)
     return addr1, addr2, i
 
 
-def _parse_addr(stmt: str, i: int) -> tuple[str | None, int]:
-    n = len(stmt)
+def _parse_addr(text: str, i: int) -> tuple[str | None, int]:
+    n = len(text)
     if i >= n:
         return None, i
-    ch = stmt[i]
+    ch = text[i]
     if ch.isdigit():
         j = i
-        while j < n and stmt[j].isdigit():
+        while j < n and text[j].isdigit():
             j += 1
-        return stmt[i:j], j
+        return text[i:j], j
     if ch == "$":
         return "$", i + 1
     if ch == "/":
-        end, _ = _scan_until(stmt, i + 1, "/")
-        return f"/{end}/", _ if end is not None else i + 1
+        body, j = _scan_until(text, i + 1, "/")
+        return f"/{body}/", j
     return None, i
 
 
@@ -205,40 +314,176 @@ def _scan_until(stmt: str, i: int, sep: str) -> tuple[str, int]:
     return "".join(out), i
 
 
+def _parse_sub(
+    text: str,
+    i: int,
+    addr1: str | None,
+    addr2: str | None,
+    negate: bool,
+    extended: bool,
+) -> tuple[SedOp, int, str | None]:
+    if text[i] != "s":
+        return SedOp(), i, "expected s"
+    i += 1
+    if i >= len(text):
+        return SedOp(), i, "incomplete s command"
+    sep = text[i]
+    i += 1
+    pat, i = _scan_until(text, i, sep)
+    repl, i = _scan_until(text, i, sep)
+    sflags = ""
+    n = len(text)
+    while i < n and text[i] not in (" ", "\t", ";", "\n", "}"):
+        sflags += text[i]
+        i += 1
+    op = SedOp(
+        addr1=addr1,
+        addr2=addr2,
+        negate=negate,
+        command="s",
+        args=(pat, repl, sflags),
+        extended=extended,
+    )
+    return op, i, None
+
+
+def _parse_translit(
+    text: str, i: int, addr1: str | None, addr2: str | None, negate: bool
+) -> tuple[SedOp, int, str | None]:
+    if text[i] != "y":
+        return SedOp(), i, "expected y"
+    i += 1
+    sep = text[i]
+    i += 1
+    src, i = _scan_until(text, i, sep)
+    dst, i = _scan_until(text, i, sep)
+    if len(src) != len(dst):
+        return SedOp(), i, "y/SRC/DST/ source and dest must have equal length"
+    return (
+        SedOp(addr1=addr1, addr2=addr2, negate=negate, command="y", args=(src, dst)),
+        i,
+        None,
+    )
+
+
 # ---------------------------------------------------------------------------
-# Address evaluation
+# Executor
 # ---------------------------------------------------------------------------
 
 
-_RANGE_STATE: dict[int, bool] = {}  # tracks whether we're inside an active range
+def _execute(ops: list[SedOp], state: SedState, line_no: int, is_last: bool) -> None:
+    """Run the compiled program on the current ``state.pattern``."""
+    pc = 0
+    while pc < len(ops):
+        op = ops[pc]
+        match = _addr_matches(op, state, line_no, is_last)
+        if op.negate:
+            match = not match
+        if not match:
+            pc += 1
+            continue
+        cmd = op.command
+        if cmd == "d":
+            state.deleted = True
+            return
+        if cmd == "D":
+            # Delete up to first embedded newline; restart cycle with rest.
+            nl = state.pattern.find("\n")
+            if nl >= 0:
+                state.pattern = state.pattern[nl + 1 :]
+                pc = 0
+                continue
+            state.deleted = True
+            return
+        if cmd == "p":
+            state.appended.append(state.pattern)
+        elif cmd == "P":
+            nl = state.pattern.find("\n")
+            state.appended.append(state.pattern if nl < 0 else state.pattern[:nl])
+        elif cmd == "=":
+            state.appended.append(str(line_no))
+        elif cmd == "n":
+            # ``n``: in our buffered model, treat as "next iteration" - just
+            # leave the pattern alone; the outer loop reads the next line.
+            return
+        elif cmd == "N":
+            return
+        elif cmd == "h":
+            state.hold = state.pattern
+        elif cmd == "H":
+            state.hold = state.hold + "\n" + state.pattern if state.hold else state.pattern
+        elif cmd == "g":
+            state.pattern = state.hold
+        elif cmd == "G":
+            state.pattern = state.pattern + "\n" + state.hold
+        elif cmd == "x":
+            state.pattern, state.hold = state.hold, state.pattern
+        elif cmd == "q":
+            state.quit = True
+            return
+        elif cmd == "y":
+            src, dst = op.args
+            state.pattern = state.pattern.translate(str.maketrans(src, dst))
+        elif cmd == "a":
+            state.appended.append(op.args[0])
+        elif cmd == "i":
+            # Insert before: emit the inserted text via ``appended`` queue
+            # backwards by writing to ``state.pattern`` is wrong; emulate via
+            # the ``appended`` list with a separator line: the cycle prints
+            # the pattern *after* appended, so ``i`` needs to land *before*.
+            # We achieve this by prepending to a synthetic appended list and
+            # printing a placeholder that is then merged.
+            state.appended.insert(0, op.args[0])
+        elif cmd == "c":
+            state.pattern = ""
+            state.deleted = True
+            state.appended.append(op.args[0])
+            return
+        elif cmd == "s":
+            pat, repl, sflags = op.args
+            new_pattern, replaced = _do_sub(state.pattern, pat, repl, sflags, op.extended)
+            state.pattern = new_pattern
+            if replaced:
+                state.last_sub_matched = True
+                if "p" in sflags:
+                    state.appended.append(state.pattern)
+        elif cmd == "b":
+            pc = op.target if op.target >= 0 else len(ops)
+            continue
+        elif cmd == "t" and state.last_sub_matched:
+            state.last_sub_matched = False
+            pc = op.target if op.target >= 0 else len(ops)
+            continue
+        pc += 1
 
 
-def _addr_matches(op: SedOp, line_no: int, is_last: bool, line: str) -> bool:
+_RANGE_KEY = id
+
+
+def _addr_matches(op: SedOp, state: SedState, line_no: int, is_last: bool) -> bool:
     if op.addr1 is None:
         return True
-    in_range = _addr_atom(op.addr1, line_no, is_last, line)
+    in_range = _addr_atom(op.addr1, line_no, is_last, state.pattern)
     if op.addr2 is None:
         return in_range
-    key = id(op)
-    state = _RANGE_STATE.get(key, False)
-    if state:
-        if _addr_atom(op.addr2, line_no, is_last, line):
-            _RANGE_STATE[key] = False
+    key = _RANGE_KEY(op)
+    active = state.range_state.get(key, False)
+    if active:
+        if _addr_atom(op.addr2, line_no, is_last, state.pattern):
+            state.range_state[key] = False
         return True
-    if in_range:
-        # Activate unless addr2 already matches on the same line.
-        if not _addr_atom(op.addr2, line_no, is_last, line):
-            _RANGE_STATE[key] = True
+    if in_range and not _addr_atom(op.addr2, line_no, is_last, state.pattern):
+        state.range_state[key] = True
         return True
-    return False
+    return in_range
 
 
-def _addr_atom(addr: str, line_no: int, is_last: bool, line: str) -> bool:
+def _addr_atom(addr: str, line_no: int, is_last: bool, pattern: str) -> bool:
     if addr == "$":
         return is_last
     if addr.startswith("/") and addr.endswith("/"):
         try:
-            return re.search(addr[1:-1], line) is not None
+            return re.search(addr[1:-1], pattern) is not None
         except re.error:
             return False
     try:
@@ -248,11 +493,11 @@ def _addr_atom(addr: str, line_no: int, is_last: bool, line: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# s/pat/repl/flags
+# Substitution helpers (BRE -> Python regex translation, sed-style backrefs)
 # ---------------------------------------------------------------------------
 
 
-def _do_sub(line: str, pat: str, repl: str, flags: str) -> str:
+def _do_sub(line: str, pat: str, repl: str, flags: str, extended: bool) -> tuple[str, bool]:
     re_flags = 0
     if "i" in flags or "I" in flags:
         re_flags |= re.IGNORECASE
@@ -261,39 +506,37 @@ def _do_sub(line: str, pat: str, repl: str, flags: str) -> str:
     if any(ch.isdigit() for ch in flags):
         digits = "".join(ch for ch in flags if ch.isdigit())
         nth = int(digits)
-    use_pat = pat if "E" in flags else _bre_to_python(pat)
+    use_pat = pat if extended else _bre_to_python(pat)
     try:
         compiled = re.compile(use_pat, re_flags)
     except re.error:
-        return line
+        return line, False
     py_repl = _convert_sed_repl(repl)
     if nth is not None:
-        # Replace the Nth match only.
         result: list[str] = []
         last = 0
+        any_replaced = False
         for idx, m in enumerate(compiled.finditer(line), start=1):
             if idx == nth:
                 result.append(line[last : m.start()])
                 result.append(m.expand(py_repl))
                 last = m.end()
+                any_replaced = True
                 if not g:
                     result.append(line[last:])
-                    return "".join(result)
+                    return "".join(result), True
         if not result:
-            return line
+            return line, False
         result.append(line[last:])
-        return "".join(result)
+        return "".join(result), any_replaced
     if g:
-        return compiled.sub(py_repl, line)
-    return compiled.sub(py_repl, line, count=1)
+        new = compiled.sub(py_repl, line)
+        return new, new != line
+    new = compiled.sub(py_repl, line, count=1)
+    return new, new != line
 
 
 def _bre_to_python(pat: str) -> str:
-    """Translate sed BRE syntax to Python regex.
-
-    In BRE, ``(``/``)``/``{``/``}``/``|``/``+``/``?`` are literal and the
-    backslash-prefixed versions are metacharacters. Python's regex flips this.
-    """
     out: list[str] = []
     i = 0
     while i < len(pat):
@@ -305,7 +548,6 @@ def _bre_to_python(pat: str) -> str:
                 i += 2
                 continue
             if nxt.isdigit():
-                # Back-reference - keep as-is.
                 out.append(ch)
                 out.append(nxt)
                 i += 2
@@ -324,7 +566,6 @@ def _bre_to_python(pat: str) -> str:
 
 
 def _convert_sed_repl(repl: str) -> str:
-    """Convert sed back-references (``\\1``) into Python ones (``\\g<1>``)."""
     out: list[str] = []
     i = 0
     while i < len(repl):

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf '1\\n2\\n3\\n' | sed -n '2!p'",
+  "stderr": "",
+  "stdout": "1\n3\n"
+}

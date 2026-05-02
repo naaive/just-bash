@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "awk 'BEGIN { printf \"[%-10s][%5d]\\n\", \"hi\", 42 }'",
+  "stderr": "",
+  "stdout": "[hi        ][   42]\n"
+}

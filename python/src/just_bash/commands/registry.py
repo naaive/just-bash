@@ -13,6 +13,7 @@ from just_bash.commands import (
     find_cmd,
     grep_cmd,
     more,
+    phase4,
     sed_cmd,
     text_utils,
 )
@@ -89,6 +90,16 @@ def default_registry() -> dict[str, CommandImpl]:
         "getent": more.cmd_getent,
         "file": more.cmd_file,
         "jq": more.cmd_jq,
+        # phase-4 extras
+        "cmp": phase4.cmd_cmp,
+        "fold": phase4.cmd_fold,
+        "expand": phase4.cmd_expand,
+        "unexpand": phase4.cmd_unexpand,
+        "mktemp": phase4.cmd_mktemp,
+        "getopt": phase4.cmd_getopt,
+        "dd": phase4.cmd_dd,
+        "cksum": phase4.cmd_cksum,
+        "crc32": phase4.cmd_crc32,
     }
 
 

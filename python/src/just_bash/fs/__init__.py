@@ -1,5 +1,6 @@
 """In-memory virtual filesystem."""
 
+from just_bash.fs.overlay_fs import OverlayFs
 from just_bash.fs.path_utils import (
     basename,
     dirname,
@@ -22,6 +23,7 @@ __all__ = [
     "File",
     "FsError",
     "FsNode",
+    "OverlayFs",
     "VirtualFs",
     "basename",
     "dirname",

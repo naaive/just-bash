@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "arr=(zero one two); for ((i=0;i<${#arr[@]};i++)); do echo \"$i:${arr[$i]}\"; done",
+  "stderr": "",
+  "stdout": "0:zero\n1:one\n2:two\n"
+}

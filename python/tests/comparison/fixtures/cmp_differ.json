@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf 'a\\n' > /tmp/x; printf 'b\\n' > /tmp/y; cmp -s /tmp/x /tmp/y; echo $?",
+  "stderr": "",
+  "stdout": "1\n"
+}

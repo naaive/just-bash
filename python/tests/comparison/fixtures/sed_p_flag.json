@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf 'foo\\nbar\\n' | sed -n 's/foo/baz/p'",
+  "stderr": "",
+  "stdout": "baz\n"
+}

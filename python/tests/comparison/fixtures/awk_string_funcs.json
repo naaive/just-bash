@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "awk 'BEGIN { s = \"hello world\"; print substr(s, 7); print index(s, \"wor\"); print length(s) }'",
+  "stderr": "",
+  "stdout": "world\n7\n11\n"
+}

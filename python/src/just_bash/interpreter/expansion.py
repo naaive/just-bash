@@ -218,8 +218,8 @@ def _expand_part(interp: Interpreter, part: WordPart, *, force_quoted: bool) -> 
 def _expand_process_sub(interp: Interpreter, part: ProcessSubstitution) -> str:
     """Materialize a ``<(cmd)`` / ``>(cmd)`` as a unique VFS path."""
     interp.fs.mkdir("/dev/fd", parents=True, exist_ok=True)
-    interp._procsub_counter += 1  # noqa: SLF001
-    path = f"/dev/fd/{interp._procsub_counter}"  # noqa: SLF001
+    interp._procsub_counter += 1
+    path = f"/dev/fd/{interp._procsub_counter}"
     if part.direction == "input":
         # Run the substitution and stash its stdout at ``path``.
         output = interp.run_substitution(part.body)
@@ -228,7 +228,7 @@ def _expand_process_sub(interp: Interpreter, part: ProcessSubstitution) -> str:
     # ``>(cmd)``: register a deferred sink; we track writes and feed the body
     # command at the end of the surrounding statement.
     interp.fs.write_file(path, b"")
-    interp._pending_output_subs.append((path, part.body))  # noqa: SLF001
+    interp._pending_output_subs.append((path, part.body))
     return path
 
 

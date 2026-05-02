@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "echo $(( $(echo 7) * 6 ))",
+  "stderr": "",
+  "stdout": "42\n"
+}
