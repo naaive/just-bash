@@ -402,27 +402,47 @@ class Interpreter:
             argv = self._build_argv(cmd)
             if not argv:
                 return 0
-            # Apply assignments. If the command is a builtin or function the
-            # assignments stay; for external commands we'd export them only
-            # for that call. The MVP keeps them in scope - close enough.
+            # ``VAR=value cmd`` is a single-command env override in bash,
+            # regardless of whether ``cmd`` is a builtin, function, or
+            # external command — the assignment must be reverted after
+            # the command finishes (special builtins ``declare`` / ``local``
+            # / ``export`` / ``readonly`` keep the assignment).
             tmp_unset: list[str] = []
+            saved_values: dict[str, tuple[str | None, list[str] | None, dict[str, str] | None]] = {}
             assignment_only_export: list[str] = []
             is_function = self.env.get_function(argv[0]) is not None
             is_builtin = argv[0] in self.builtins
+            keep_assignments = argv[0] in Interpreter._ASSIGN_CONTEXT_CMDS
             for assn in cmd.assignments:
-                if is_function or is_builtin:
+                if keep_assignments:
                     self._apply_assignment(assn, exported=False)
+                    continue
+                # Snapshot existing value (or unset marker) so we can restore.
+                existing = self.env.get_var(assn.name)
+                if existing is None:
+                    tmp_unset.append(assn.name)
                 else:
-                    # Single-command env override: track for cleanup.
-                    if not self.env.has(assn.name):
-                        tmp_unset.append(assn.name)
-                    self._apply_assignment(assn, exported=True)
+                    saved_values[assn.name] = (
+                        existing.value,
+                        list(existing.array) if existing.array is not None else None,
+                        dict(existing.assoc) if existing.assoc is not None else None,
+                    )
+                self._apply_assignment(assn, exported=not (is_function or is_builtin))
+                if not (is_function or is_builtin):
                     assignment_only_export.append(assn.name)
             try:
                 return self._dispatch(argv, new_io)
             finally:
-                for name in tmp_unset:
-                    self.env.unset(name)
+                if not keep_assignments:
+                    for name in tmp_unset:
+                        self.env.unset(name)
+                    for name, (val, arr, assoc) in saved_values.items():
+                        v = self.env.get_var(name)
+                        if v is None:
+                            continue
+                        v.value = val or ""
+                        v.array = arr
+                        v.assoc = assoc
                 for name in assignment_only_export:
                     if name in tmp_unset:
                         continue

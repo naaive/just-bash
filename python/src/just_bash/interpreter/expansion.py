@@ -617,7 +617,11 @@ def _word_split(pieces: list[_Piece], ifs: str | None) -> list[tuple[str, bool]]
     if current or had_quoted:
         fields.append((current, had_quoted))
     if not fields:
-        return [("", True)]  # quoted-empty stays as one empty field
+        # Bash semantics: unquoted empty expansions produce ZERO fields,
+        # but a literal ``""`` (or any quoted piece) keeps one empty field.
+        if any(p.quoted for p in pieces):
+            return [("", True)]
+        return []
     return fields
 
 
