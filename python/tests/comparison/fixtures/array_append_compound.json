@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "arr=(a b)\narr+=(c d)\narr+=(e)\necho \"${arr[@]}\"\necho \"len=${#arr[@]}\"",
+  "stderr": "",
+  "stdout": "a b c d e\nlen=5\n"
+}

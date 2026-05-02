@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "command -v echo > /dev/null && echo found\ncommand -v this_command_does_not_exist > /dev/null || echo missing",
+  "stderr": "",
+  "stdout": "found\nmissing\n"
+}

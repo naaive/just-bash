@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "set -e\nset -o pipefail\necho before\n( exit 7 ) | cat || echo \"caught: $?\"\necho after",
+  "stderr": "",
+  "stdout": "before\ncaught: 7\nafter\n"
+}

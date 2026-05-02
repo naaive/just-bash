@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf '%.3f %.0f\\n' 3.14159 99.5",
+  "stderr": "",
+  "stdout": "3.142 100\n"
+}

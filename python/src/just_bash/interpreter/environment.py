@@ -21,6 +21,9 @@ class Variable:
     readonly: bool = False
     array: list[str] | None = None
     assoc: dict[str, str] | None = None
+    # Set when this variable was created via ``declare -n`` / ``local -n``.
+    # Reads/writes through the variable transparently follow the target.
+    nameref_target: str | None = None
 
 
 @dataclass(slots=True)
@@ -126,12 +129,17 @@ class Environment:
         v = self._lookup(name)
         if v is None:
             return None
+        if v.nameref_target is not None and v.nameref_target != name:
+            return self.get(v.nameref_target)
         if v.array is not None:
             return v.array[0] if v.array else ""
         return v.value
 
     def get_var(self, name: str) -> Variable | None:
-        return self._lookup(name)
+        v = self._lookup(name)
+        if v is not None and v.nameref_target is not None and v.nameref_target != name:
+            return self._lookup(v.nameref_target)
+        return v
 
     def _lookup(self, name: str) -> Variable | None:
         for scope in reversed(self._scopes):
@@ -156,6 +164,12 @@ class Environment:
         if existing is None and not local:
             existing = self.global_scope.vars.get(name)
             scope = self.global_scope
+        # Follow namerefs on writes too: ``ref=value`` updates the target.
+        if existing is not None and existing.nameref_target is not None:
+            target = existing.nameref_target
+            if target != name:
+                self.set_var(target, value, exported=exported, local=False, append=append)
+                return
         if existing is None:
             scope.vars[name] = Variable(value=value, exported=exported)
             return
@@ -211,9 +225,21 @@ class Environment:
             return
         scope.vars[name] = Variable(value="", assoc={}, exported=exported)
 
+    def declare_nameref(self, name: str, target: str, *, local: bool = False) -> None:
+        """Declare ``name`` as a nameref pointing at ``target``.
+
+        Subsequent reads of ``$name`` resolve to ``$target`` and assignments
+        to ``name`` write through to ``target``.
+        """
+        scope = self._scopes[-1] if local else self.global_scope
+        scope.vars[name] = Variable(value=target, nameref_target=target or None)
+
     def set_assoc_element(self, name: str, key: str, value: str) -> None:
         """Set ``arr[key] = value`` for an associative array."""
         v = self._lookup(name)
+        if v is not None and v.nameref_target is not None and v.nameref_target != name:
+            self.set_assoc_element(v.nameref_target, key, value)
+            return
         if v is None:
             self.global_scope.vars[name] = Variable(value="", assoc={key: value})
             return
@@ -224,6 +250,9 @@ class Environment:
     def set_array_element(self, name: str, index: int, value: str) -> None:
         """Set ``arr[index] = value`` for an indexed array (auto-extends)."""
         v = self._lookup(name)
+        if v is not None and v.nameref_target is not None and v.nameref_target != name:
+            self.set_array_element(v.nameref_target, index, value)
+            return
         if v is None:
             arr = [""] * index + [value]
             self.global_scope.vars[name] = Variable(value=value if index == 0 else "", array=arr)
@@ -243,12 +272,16 @@ class Environment:
         v = self._lookup(name)
         if v is None:
             return None
+        if v.nameref_target is not None and v.nameref_target != name:
+            return self.get_array(v.nameref_target)
         return v.array
 
     def get_assoc(self, name: str) -> dict[str, str] | None:
         v = self._lookup(name)
         if v is None:
             return None
+        if v.nameref_target is not None and v.nameref_target != name:
+            return self.get_assoc(v.nameref_target)
         return v.assoc
 
     def unset(self, name: str) -> None:

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "show() {\n  echo \"count=$#\"\n  for arg in \"$@\"; do\n    echo \"[$arg]\"\n  done\n}\nshow alpha \"two words\" beta",
+  "stderr": "",
+  "stdout": "count=3\n[alpha]\n[two words]\n[beta]\n"
+}

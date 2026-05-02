@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "unset a\nunset b\necho \"${a:-${b:-fallback}}\"\nb=BB\necho \"${a:-${b:-fallback}}\"\na=AA\necho \"${a:-${b:-fallback}}\"",
+  "stderr": "",
+  "stdout": "fallback\nBB\nAA\n"
+}

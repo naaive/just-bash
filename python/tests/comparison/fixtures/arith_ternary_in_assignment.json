@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "n=5\nsign=$(( n > 0 ? 1 : (n < 0 ? -1 : 0) ))\necho \"$sign\"\nn=-3\nsign=$(( n > 0 ? 1 : (n < 0 ? -1 : 0) ))\necho \"$sign\"\nn=0\nsign=$(( n > 0 ? 1 : (n < 0 ? -1 : 0) ))\necho \"$sign\"",
+  "stderr": "",
+  "stdout": "1\n-1\n0\n"
+}

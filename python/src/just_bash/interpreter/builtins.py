@@ -202,7 +202,7 @@ def _b_printf(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
 
 
 _PRINTF_FMT = re.compile(
-    r"%(?P<flags>[-+ 0#]*)(?P<width>\d*)(?:\.(?P<prec>\d+))?(?P<conv>[%dsioxXc])"
+    r"%(?P<flags>[-+ 0#]*)(?P<width>\d*)(?:\.(?P<prec>\d+))?(?P<conv>[%dsioxXcqbef])"
 )
 
 
@@ -256,7 +256,55 @@ def _format_printf(arg: str, m: re.Match[str]) -> str:
         return spec % value
     if conv == "c":
         return arg[:1]
+    if conv == "q":
+        # ``%q`` shell-quotes ``arg`` so it can be safely re-parsed by bash.
+        return _shell_quote(arg)
+    if conv == "b":
+        # ``%b`` interprets backslash escapes in ``arg`` (cf. echo -e).
+        return _interpret_escapes(arg)
+    if conv in ("e", "f"):
+        try:
+            value = float(arg) if arg else 0.0
+        except ValueError:
+            value = 0.0
+        return spec % value
     return spec % arg
+
+
+def _shell_quote(s: str) -> str:
+    """Quote ``s`` so a fresh bash invocation reads it back as the same value.
+
+    Matches ``bash``'s ``printf %q`` style: empty string is ``''``, plain
+    identifiers are emitted bare, and anything else is backslash-escaped.
+    Strings containing control characters fall back to ANSI-C ``$'...'``.
+    """
+    if s == "":
+        return "''"
+    if any(c < " " for c in s):
+        # ANSI-C quoting for control characters (newline, tab, etc.).
+        out: list[str] = ["$'"]
+        for c in s:
+            if c == "\n":
+                out.append("\\n")
+            elif c == "\t":
+                out.append("\\t")
+            elif c == "\r":
+                out.append("\\r")
+            elif c == "\\":
+                out.append("\\\\")
+            elif c == "'":
+                out.append("\\'")
+            elif c < " ":
+                out.append(f"\\x{ord(c):02x}")
+            else:
+                out.append(c)
+        out.append("'")
+        return "".join(out)
+    safe = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-./:=@%+,")
+    if all(c in safe for c in s):
+        return s
+    # Backslash-escape every non-safe character.
+    return "".join(c if c in safe else "\\" + c for c in s)
 
 
 # ---------------------------------------------------------------------------
@@ -324,22 +372,54 @@ def _b_set(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
             if v is not None:
                 io_ctx.stdout.write(f"{name}={v.value}\n".encode())
         return 0
-    # ``set -e``, ``set +e`` etc.: just track the flags.
+    # ``set -e`` / ``set +e`` flag groups, plus ``set -o NAME`` / ``set +o NAME``
+    # for long-form options like ``pipefail``, ``nounset``, ``errexit``.
+    _LONG_TO_SHORT = {
+        "errexit": "e",
+        "nounset": "u",
+        "xtrace": "x",
+        "noexec": "n",
+        "noglob": "f",
+        "noclobber": "C",
+        "verbose": "v",
+        "monitor": "m",
+        "histexpand": "H",
+        "interactive-comments": "I",
+        "pipefail": "P",  # internal mapping; bash has no short alias
+    }
     pos: list[str] = []
     parsed_flags = False
-    for arg in args:
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if not parsed_flags and arg in ("-o", "+o") and i + 1 < len(args):
+            target = args[i + 1]
+            short = _LONG_TO_SHORT.get(target)
+            if short is None:
+                io_ctx.stderr.write(f"set: invalid option name: {target}\n".encode())
+                return 2
+            if arg == "-o":
+                interp.env.shell_options.add(short)
+            else:
+                interp.env.shell_options.discard(short)
+            i += 2
+            continue
         if not parsed_flags and arg.startswith("-") and len(arg) > 1 and not arg.startswith("--"):
             for c in arg[1:]:
                 interp.env.shell_options.add(c)
+            i += 1
             continue
         if not parsed_flags and arg.startswith("+") and len(arg) > 1:
             for c in arg[1:]:
                 interp.env.shell_options.discard(c)
+            i += 1
             continue
         if arg == "--":
             parsed_flags = True
+            i += 1
             continue
         pos.append(arg)
+        i += 1
     if pos:
         interp.env.positional = pos
     return 0
@@ -534,13 +614,9 @@ def _b_local(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
     if not interp.env.in_function():
         io_ctx.stderr.write(b"local: can only be used in a function\n")
         return 1
-    for arg in argv[1:]:
-        if "=" in arg:
-            name, _, value = arg.partition("=")
-            interp.env.set_var(name, value, local=True)
-        else:
-            interp.env.set_var(arg, "", local=True)
-    return 0
+    # Delegate to ``declare`` (with ``local`` semantics) so flag parsing —
+    # in particular ``-n`` for namerefs — stays in one place.
+    return _b_declare(interp, ["local", *argv[1:]], io_ctx)
 
 
 # ---------------------------------------------------------------------------
@@ -673,6 +749,8 @@ def _b_declare(interp: Interpreter, argv: list[str], _io: IO) -> int:
     exported = False
     assoc = False
     indexed = False
+    nameref = False
+    is_local = argv[0] == "local"
     while args and (args[0].startswith(("-", "+"))) and args[0] not in ("-", "--"):
         flag = args[0]
         if flag.startswith("-"):
@@ -682,22 +760,33 @@ def _b_declare(interp: Interpreter, argv: list[str], _io: IO) -> int:
                 assoc = True
             if "a" in flag[1:]:
                 indexed = True
+            if "n" in flag[1:]:
+                nameref = True
         args = args[1:]
     if args and args[0] == "--":
         args = args[1:]
     for arg in args:
         if "=" in arg:
             name, _, value = arg.partition("=")
+            if nameref:
+                interp.env.declare_nameref(name, value, local=is_local)
+                continue
             if assoc:
                 interp.env.declare_assoc(name, exported=exported)
             elif indexed:
                 interp.env.set_array(name, [value], exported=exported)
+            elif is_local:
+                interp.env.set_var(name, value, exported=exported, local=True)
             else:
                 interp.env.set_var(name, value, exported=exported)
+        elif nameref:
+            interp.env.declare_nameref(arg, "", local=is_local)
         elif assoc:
             interp.env.declare_assoc(arg, exported=exported)
         elif indexed:
             interp.env.set_array(arg, [], exported=exported)
+        elif is_local:
+            interp.env.set_var(arg, "", exported=exported, local=True)
         else:
             interp.env.set_var(arg, "", exported=exported)
     return 0

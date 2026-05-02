@@ -231,7 +231,12 @@ class Interpreter:
             if i < len(pipeline.commands) - 1:
                 stages_out.append(stage_io.stdout.getvalue())
         self.env.last_pipeline_status = statuses
-        last = statuses[-1]
+        # ``set -o pipefail``: the pipeline exit is the last non-zero status
+        # of any stage, or 0 if all succeeded.
+        if "P" in self.env.shell_options:
+            last = next((s for s in reversed(statuses) if s != 0), 0)
+        else:
+            last = statuses[-1]
         return 1 - last if pipeline.negated else last
 
     # ------------------------------------------------------------- commands
