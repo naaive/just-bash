@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "inner() {\n  local x=inner\n  echo \"inner: $x\"\n}\nouter() {\n  local x=outer\n  inner\n  echo \"outer: $x\"\n}\nouter",
+  "stderr": "",
+  "stdout": "inner: inner\nouter: outer\n"
+}

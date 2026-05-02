@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "echo \"the quick brown fox jumps over the lazy dog\" | tr ' ' '\\n' | sort | uniq -c | sort -rn",
+  "stderr": "",
+  "stdout": "      2 the\n      1 quick\n      1 over\n      1 lazy\n      1 jumps\n      1 fox\n      1 dog\n      1 brown\n"
+}

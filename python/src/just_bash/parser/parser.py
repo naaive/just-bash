@@ -300,6 +300,13 @@ class Parser:
                 return self._parse_until()
             if tok.text == "case":
                 return self._parse_case()
+            if tok.text == "select":
+                # ``select`` is a non-interactive iteration in our sandbox: we
+                # parse its body but execute it as if the user picked nothing
+                # (the ``in`` words become a one-pass loop body so post-loop
+                # state is consistent with bash's "user pressed Ctrl-D"
+                # behaviour).
+                return self._parse_select()
             if tok.text == "function":
                 return self._parse_function_keyword()
             if tok.text == "{":
@@ -310,9 +317,15 @@ class Parser:
             return self._parse_subshell()
         if tok.kind is TokenKind.OPERATOR and tok.text.startswith("((") and tok.text.endswith("))"):
             return self._parse_arith_command_token()
-        # Function definition: name() { ... }
+        # Function definition: name() { ... }. The name must be a plain
+        # identifier - tokens like ``arr=`` (assignment-prefix) or ``arr+=``
+        # are NOT function definitions even though the lexer also follows
+        # them with a ``(`` (in ``arr=()`` array literal form).
         if (
             tok.kind is TokenKind.WORD
+            and tok.text
+            and (tok.text[0].isalpha() or tok.text[0] == "_")
+            and all(c.isalnum() or c == "_" for c in tok.text)
             and self._peek(1).kind is TokenKind.OPERATOR
             and self._peek(1).text == "("
             and self._peek(2).kind is TokenKind.OPERATOR
@@ -590,6 +603,56 @@ class Parser:
         # The caller stores it in a Pipeline.commands list, which accepts any
         # CompoundCommand. Cast accordingly.
         return group  # type: ignore[return-value]
+
+    def _parse_select(self) -> For:
+        """Parse ``select VAR in WORDS; do BODY; done``.
+
+        Sandboxed semantics: the body runs once per word (no interactive
+        prompt). This keeps scripts that use ``select`` for menu-style
+        iteration deterministic.
+        """
+        line = self._peek().line
+        self._consume(TokenKind.WORD, "select")
+        var_tok = self._next()
+        if var_tok.kind is not TokenKind.WORD:
+            raise ParseError("expected select variable", var_tok)
+        variable = var_tok.text
+        self._skip_newlines()
+        words: list[Word] | None = None
+        if self._is_reserved(self._peek(), "in"):
+            self._next()
+            words = []
+            while True:
+                tok = self._peek()
+                if tok.kind is TokenKind.OPERATOR and tok.text in (";", "\n"):
+                    self._next()
+                    break
+                if tok.kind is TokenKind.NEWLINE:
+                    self._next()
+                    break
+                if tok.kind is TokenKind.WORD and tok.text == "do":
+                    break
+                if tok.kind is TokenKind.WORD:
+                    self._next()
+                    words.append(parse_word(tok.text, line=tok.line))
+                    continue
+                if tok.kind is TokenKind.EOF:
+                    raise ParseError("unexpected EOF in select", tok)
+                raise ParseError("unexpected token in select", tok)
+        self._skip_newlines()
+        if self._peek().kind is TokenKind.OPERATOR and self._peek().text == ";":
+            self._next()
+        self._skip_newlines()
+        self._consume(TokenKind.WORD, "do")
+        body = self._parse_compound_list_until({"done"})
+        self._consume(TokenKind.WORD, "done")
+        return For(
+            variable=variable,
+            words=words,
+            body=body,
+            line=line,
+            redirections=self._parse_trailing_redirections(),
+        )
 
     # ------------------------------------------------------------ while/until
     def _parse_while(self) -> While:

@@ -169,8 +169,6 @@ def cmd_sort(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
     return rc
 
 
-
-
 def cmd_uniq(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
     try:
         flags, paths = parse_flags(argv, boolean={"-c", "-d", "-u", "-i"})

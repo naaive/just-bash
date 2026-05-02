@@ -161,6 +161,19 @@ def _parse_dollar(raw: str, start: int, line: int) -> tuple[int, WordPart]:
     if start + 1 >= n:
         return start + 1, Literal(line=line, value="$")
     nxt = raw[start + 1]
+    if nxt == "'":
+        # ``$'...'`` ANSI-C string: decode backslash escapes and surface as
+        # a single-quoted literal so subsequent expansion treats it as
+        # already-quoted text.
+        end = start + 2
+        while end < n and raw[end] != "'":
+            if raw[end] == "\\" and end + 1 < n:
+                end += 2
+                continue
+            end += 1
+        body = raw[start + 2 : end]
+        decoded = _decode_ansi_c(body)
+        return end + 1, SingleQuoted(line=line, value=decoded)
     if nxt == "{":
         return _parse_brace_param(raw, start, line)
     if nxt == "(":
@@ -591,6 +604,63 @@ def _is_int(s: str) -> bool:
     if s[0] in "+-":
         s = s[1:]
     return s.isdigit()
+
+
+def _decode_ansi_c(body: str) -> str:
+    """Decode the escapes recognised inside ``$'...'`` (a la printf %b)."""
+    out: list[str] = []
+    i = 0
+    n = len(body)
+    while i < n:
+        ch = body[i]
+        if ch != "\\" or i + 1 >= n:
+            out.append(ch)
+            i += 1
+            continue
+        nxt = body[i + 1]
+        simple = {
+            "a": "\a",
+            "b": "\b",
+            "e": "\x1b",
+            "E": "\x1b",
+            "f": "\f",
+            "n": "\n",
+            "r": "\r",
+            "t": "\t",
+            "v": "\v",
+            "\\": "\\",
+            "'": "'",
+            '"': '"',
+            "?": "?",
+            "0": "\0",
+        }
+        if nxt in simple:
+            out.append(simple[nxt])
+            i += 2
+            continue
+        if nxt == "x" and i + 2 < n:
+            j = i + 2
+            while j < n and j < i + 4 and body[j] in "0123456789abcdefABCDEF":
+                j += 1
+            try:
+                out.append(chr(int(body[i + 2 : j], 16)))
+                i = j
+                continue
+            except ValueError:
+                pass
+        if nxt.isdigit():
+            j = i + 1
+            while j < n and j < i + 4 and body[j] in "01234567":
+                j += 1
+            try:
+                out.append(chr(int(body[i + 1 : j], 8)))
+                i = j
+                continue
+            except ValueError:
+                pass
+        out.append(nxt)
+        i += 2
+    return "".join(out)
 
 
 __all__ = ["WordParseError", "parse_word"]

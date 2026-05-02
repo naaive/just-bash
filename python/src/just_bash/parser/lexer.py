@@ -347,6 +347,26 @@ class Lexer:
         if self._eof():
             return "".join(out)
         nxt = self._peek_char()
+        if nxt == "'":
+            # ``$'...'`` ANSI-C quoted string. We keep the literal ``$'...'``
+            # form in the word so ``parse_word`` can decode the escapes.
+            out.append(self._advance())
+            while not self._eof():
+                ch = self._peek_char()
+                if ch == "\\" and not self._eof():
+                    out.append(self._advance())
+                    if not self._eof():
+                        out.append(self._advance())
+                    continue
+                out.append(self._advance())
+                if ch == "'":
+                    return "".join(out)
+            return "".join(out)
+        if nxt == '"':
+            # ``$"..."`` is locale-translated bash string; we just expand
+            # like a normal double-quoted string.
+            out.append(self._read_double_quoted())
+            return "".join(out)
         if nxt == "{":
             out.append(self._read_balanced("{", "}"))
             return "".join(out)

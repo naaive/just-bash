@@ -546,11 +546,49 @@ def _b_type(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
 
 
 def _b_command(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
+    """``command [-v|-V|-p] NAME ...`` - dispatch / introspect a command.
+
+    With ``-v`` we report how each NAME would resolve (one line each) and
+    exit non-zero if any are unknown. Without flags we just dispatch.
+    """
     args = argv[1:]
+    show_v = False
+    show_V = False
     while args and args[0].startswith("-"):
+        if args[0] == "-v":
+            show_v = True
+        elif args[0] == "-V":
+            show_V = True
+        # Other flags (``-p``) are accepted as no-ops.
         args = args[1:]
     if not args:
         return 0
+    if show_v or show_V:
+        rc = 0
+        for name in args:
+            if name in interp.builtins:
+                io_ctx.stdout.write(
+                    (name + "\n").encode() if show_v else f"{name} is a shell builtin\n".encode()
+                )
+                continue
+            if interp.env.get_function(name) is not None:
+                io_ctx.stdout.write(
+                    (name + "\n").encode() if show_v else f"{name} is a function\n".encode()
+                )
+                continue
+            if name in interp.commands:
+                io_ctx.stdout.write(
+                    f"/usr/bin/{name}\n".encode()
+                    if show_v
+                    else f"{name} is /usr/bin/{name}\n".encode()
+                )
+                continue
+            # ``command -v UNKNOWN`` is silent on stderr; only ``-V`` prints
+            # a "not found" message. The non-zero exit code signals failure.
+            if show_V:
+                io_ctx.stderr.write(f"command: {name}: not found\n".encode())
+            rc = 1
+        return rc
     return interp._dispatch(args, io_ctx)
 
 

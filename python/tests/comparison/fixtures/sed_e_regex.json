@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "echo \"abc123def\" | sed -E \"s/([a-z]+)([0-9]+)/[\\\\1|\\\\2]/g\"",
+  "stderr": "",
+  "stdout": "[abc|123]def\n"
+}

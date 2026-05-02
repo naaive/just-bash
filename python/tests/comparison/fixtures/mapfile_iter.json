@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf '%s\\n' alpha beta gamma | { mapfile -t arr; for x in \"${arr[@]}\"; do echo \"<$x>\"; done; }",
+  "stderr": "",
+  "stdout": "<alpha>\n<beta>\n<gamma>\n"
+}

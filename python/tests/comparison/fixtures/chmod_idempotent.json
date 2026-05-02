@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": ": > /tmp/x; chmod 644 /tmp/x; echo done",
+  "stderr": "",
+  "stdout": "done\n"
+}

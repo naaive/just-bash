@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "data=\"dept,salary\neng,100\nops,50\neng,80\nsales,60\"\necho \"$data\" | tail -n +2 | awk -F, '{ s[$1] += $2 } END { for (k in s) print k\": \"s[k] }' | sort",
+  "stderr": "",
+  "stdout": "eng: 180\nops: 50\nsales: 60\n"
+}

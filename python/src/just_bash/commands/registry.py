@@ -16,6 +16,7 @@ from just_bash.commands import (
     phase4,
     phase6,
     phase7,
+    phase8,
     sed_cmd,
     text_utils,
 )
@@ -147,6 +148,24 @@ def default_registry() -> dict[str, CommandImpl]:
             "sleep": phase7.cmd_sleep,
             "env": phase7.cmd_env,
             "realpath": phase7.cmd_realpath_e,
+        }
+    )
+    # Phase 8: networking/IO stubs and admin helpers.
+    base.update(
+        {
+            "nproc": phase8.cmd_nproc,
+            "timeout": phase8.cmd_timeout,
+            "rsync": phase8.cmd_rsync,
+            "ssh": phase8.cmd_ssh,
+            "scp": phase8.cmd_scp,
+            "chmod": phase8.cmd_chmod,
+            "chown": phase8.cmd_chown,
+            "chgrp": phase8.cmd_chgrp,
+            "readlink": phase8.cmd_readlink,
+            "sync": phase8.cmd_sync,
+            "mountpoint": phase8.cmd_mountpoint,
+            "strings": phase8.cmd_strings,
+            "jot": phase8.cmd_seq_alias,
         }
     )
     return base

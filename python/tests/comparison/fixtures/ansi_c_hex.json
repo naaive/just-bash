@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "echo $'\\x41\\x42\\x43'",
+  "stderr": "",
+  "stdout": "ABC\n"
+}
