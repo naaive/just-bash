@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "echo before; ( exit 7 ); echo after; echo $?",
+  "stderr": "",
+  "stdout": "before\nafter\n0\n"
+}

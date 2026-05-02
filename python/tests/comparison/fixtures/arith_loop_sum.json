@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "sum=0; for i in {1..10}; do (( sum += i )); done; echo \"$sum\"",
+  "stderr": "",
+  "stdout": "55\n"
+}

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf -v s \"%d|\" 1 2 3; echo \"$s\"",
+  "stderr": "",
+  "stdout": "1|2|3|\n"
+}

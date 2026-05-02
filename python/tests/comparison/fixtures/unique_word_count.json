@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "text=\"the quick brown fox jumps over the lazy dog the end\"\necho \"$text\" | tr ' ' '\\n' | sort | uniq -c | sort -rn | head -3",
+  "stderr": "",
+  "stdout": "      3 the\n      1 quick\n      1 over\n"
+}

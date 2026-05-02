@@ -354,6 +354,9 @@ class Interpreter:
         saved_positional = list(self.env.positional)
         try:
             return self._exec_block(node.body, io_ctx)
+        except ExitException as e:
+            # ``exit N`` inside ``( ... )`` only terminates the subshell.
+            return e.code
         finally:
             # Drop variables introduced inside the subshell.
             for name in list(self.env.all_var_names()):

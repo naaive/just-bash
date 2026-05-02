@@ -83,6 +83,9 @@ def default_builtins() -> dict[str, Builtin]:
         "logout": _b_exit,
         "suspend": _b_noop,
         "hash": _b_hash,
+        "getopts": _b_getopts,
+        "select": _b_noop,
+        "coproc": _b_noop,
     }
 
 
@@ -172,19 +175,29 @@ def _interpret_escapes(s: str) -> str:
     return "".join(out)
 
 
-def _b_printf(_i: Interpreter, argv: list[str], io_ctx: IO) -> int:
-    if len(argv) < 2:
-        io_ctx.stderr.write(b"printf: usage: printf format [arguments]\n")
+def _b_printf(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
+    """``printf FORMAT [ARG...]`` with ``-v VAR`` to write into a variable."""
+    args = argv[1:]
+    target_var: str | None = None
+    if len(args) >= 2 and args[0] == "-v":
+        target_var = args[1]
+        args = args[2:]
+    if not args:
+        io_ctx.stderr.write(b"printf: usage: printf [-v VAR] format [arguments]\n")
         return 2
-    fmt_raw = _interpret_escapes(argv[1])
-    args = argv[2:]
+    fmt_raw = _interpret_escapes(args[0])
+    rest = args[1:]
     output: list[str] = []
     while True:
-        rendered, args = _render_printf(fmt_raw, args)
+        rendered, rest = _render_printf(fmt_raw, rest)
         output.append(rendered)
-        if not args:
+        if not rest:
             break
-    io_ctx.stdout.write("".join(output).encode("utf-8"))
+    text = "".join(output)
+    if target_var is not None:
+        interp.env.set_var(target_var, text)
+    else:
+        io_ctx.stdout.write(text.encode("utf-8"))
     return 0
 
 
@@ -866,6 +879,97 @@ def _b_caller(interp: Interpreter, _argv: list[str], io_ctx: IO) -> int:
 
 
 def _b_hash(_interp: Interpreter, _argv: list[str], _io: IO) -> int:
+    return 0
+
+
+def _b_getopts(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
+    """``getopts OPTSTRING NAME [ARG...]`` - parse positional args one option at a time.
+
+    Maintains ``OPTIND`` and ``OPTARG`` in the environment, returns 0 while
+    options remain, 1 when exhausted. Letters followed by ``:`` take an
+    argument; a leading ``:`` in ``OPTSTRING`` enables silent error mode.
+    """
+    if len(argv) < 3:
+        io_ctx.stderr.write(b"getopts: usage: getopts OPTSTRING NAME [ARG...]\n")
+        return 2
+    optstr = argv[1]
+    name = argv[2]
+    args = argv[3:] if len(argv) > 3 else interp.env.positional
+    silent = optstr.startswith(":")
+    if silent:
+        optstr = optstr[1:]
+    needs_arg: dict[str, bool] = {}
+    i = 0
+    while i < len(optstr):
+        c = optstr[i]
+        wants = i + 1 < len(optstr) and optstr[i + 1] == ":"
+        needs_arg[c] = wants
+        i += 2 if wants else 1
+    optind = int(interp.env.get("OPTIND") or "1")
+    if optind > len(args):
+        return 1
+    cur = args[optind - 1]
+    if not cur.startswith("-") or cur == "-":
+        return 1
+    if cur == "--":
+        interp.env.set_var("OPTIND", str(optind + 1))
+        return 1
+    # Sub-index inside a packed option run (e.g. ``-abc``).
+    sub = int(interp.env.get("__getopts_sub") or "1")
+    if sub >= len(cur):
+        # Already consumed; advance to next.
+        optind += 1
+        sub = 1
+        interp.env.set_var("OPTIND", str(optind))
+        interp.env.set_var("__getopts_sub", "1")
+        if optind > len(args) or not args[optind - 1].startswith("-"):
+            return 1
+        cur = args[optind - 1]
+    letter = cur[sub]
+    if letter not in needs_arg:
+        interp.env.set_var(name, "?")
+        if silent:
+            interp.env.set_var("OPTARG", letter)
+        else:
+            io_ctx.stderr.write(f"getopts: illegal option -- {letter}\n".encode())
+            interp.env.unset("OPTARG")
+        if sub + 1 >= len(cur):
+            interp.env.set_var("OPTIND", str(optind + 1))
+            interp.env.set_var("__getopts_sub", "1")
+        else:
+            interp.env.set_var("__getopts_sub", str(sub + 1))
+        return 0
+    if needs_arg[letter]:
+        # Argument may be glued (``-cVAL``) or in the next argv.
+        if sub + 1 < len(cur):
+            interp.env.set_var("OPTARG", cur[sub + 1 :])
+            interp.env.set_var("OPTIND", str(optind + 1))
+            interp.env.set_var("__getopts_sub", "1")
+        else:
+            optind += 1
+            if optind > len(args):
+                interp.env.set_var(name, ":" if silent else "?")
+                if silent:
+                    interp.env.set_var("OPTARG", letter)
+                else:
+                    io_ctx.stderr.write(
+                        f"getopts: option requires an argument -- {letter}\n".encode()
+                    )
+                interp.env.set_var("OPTIND", str(optind))
+                return 0
+            interp.env.set_var("OPTARG", args[optind - 1])
+            interp.env.set_var("OPTIND", str(optind + 1))
+            interp.env.set_var("__getopts_sub", "1")
+        interp.env.set_var(name, letter)
+        return 0
+    # Boolean flag.
+    interp.env.set_var(name, letter)
+    interp.env.unset("OPTARG")
+    if sub + 1 >= len(cur):
+        interp.env.set_var("OPTIND", str(optind + 1))
+        interp.env.set_var("__getopts_sub", "1")
+    else:
+        interp.env.set_var("__getopts_sub", str(sub + 1))
     return 0
 
 

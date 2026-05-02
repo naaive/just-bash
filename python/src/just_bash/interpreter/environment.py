@@ -55,6 +55,33 @@ class Environment:
         # Trap handlers, keyed by signal name (``EXIT``, ``ERR``, ``INT``, ...).
         # ``""`` value disables the trap; absence means default behavior.
         self.traps: dict[str, str] = {}
+        # Approximation of ``$SECONDS`` - we record the wall-clock origin and
+        # read it on demand. ``$RANDOM`` reads from a deterministic generator
+        # (seeded from ``$RANDOM`` writes when set).
+        import random
+        import time
+
+        self._start_time = time.monotonic()
+        self._rng = random.Random()
+        # Pre-populate well-known introspection variables so script preambles
+        # that reference ``$BASH_VERSION`` etc. don't break.
+        self.set_var("BASH_VERSION", "5.2.21(1)-just-bash-py")
+        self.set_var("BASH", "/usr/bin/bash")
+        self.set_var("BASH_SOURCE", "")
+        self.set_var("BASHPID", "1")
+        self.set_var("EUID", "1000")
+        self.set_var("UID", "1000")
+        self.set_var("HOSTNAME", "sandbox")
+        self.set_var("HOSTTYPE", "x86_64")
+        self.set_var("MACHTYPE", "x86_64-pc-linux-gnu")
+        self.set_var("OSTYPE", "linux-gnu")
+        self.set_var("PPID", "0")
+        self.set_var("RANDOM", "0")
+        self.set_var("LINENO", "0")
+        self.set_var("SHELL", "/bin/bash")
+        self.set_var("SHLVL", "1")
+        self.set_var("SECONDS", "0")
+        self.set_var("OPTIND", "1")
         if initial_env:
             for k, v in initial_env.items():
                 self.set_var(k, v, exported=True)
@@ -77,6 +104,15 @@ class Environment:
 
     # ----------------------------------------------------------------- vars
     def get(self, name: str) -> str | None:
+        # Computed introspection vars: re-evaluate on each read.
+        if name == "SECONDS":
+            import time
+
+            return str(int(time.monotonic() - self._start_time))
+        if name == "RANDOM":
+            return str(self._rng.randrange(0, 32768))
+        if name == "PIPESTATUS":
+            return str(self.last_pipeline_status[-1]) if self.last_pipeline_status else "0"
         v = self._lookup(name)
         if v is None:
             return None

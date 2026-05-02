@@ -15,6 +15,7 @@ from just_bash.commands import (
     more,
     phase4,
     phase6,
+    phase7,
     sed_cmd,
     text_utils,
 )
@@ -27,8 +28,13 @@ CommandImpl = Callable[["Interpreter", "list[str]", "IO"], int]
 
 
 def default_registry() -> dict[str, CommandImpl]:
-    """Return the builtin command -> implementation map."""
-    return {
+    """Return the builtin command -> implementation map.
+
+    Later phases may register the same name as an earlier phase to ship a
+    more complete implementation. We build the dict in stages so the final
+    pass wins; ``ruff`` would otherwise flag the duplicate keys.
+    """
+    base: dict[str, CommandImpl] = {
         # I/O
         "cat": basic.cmd_cat,
         "ls": basic.cmd_ls,
@@ -129,6 +135,21 @@ def default_registry() -> dict[str, CommandImpl]:
         "tput": phase6.cmd_tput,
         "stty": phase6.cmd_stty,
     }
+    # Phase-7 supersedes earlier basename/dirname/sleep/env/realpath impls.
+    base.update(
+        {
+            "factor": phase7.cmd_factor,
+            "install": phase7.cmd_install,
+            "truncate": phase7.cmd_truncate,
+            "shasum": phase7.cmd_shasum,
+            "basename": phase7.cmd_basename,
+            "dirname": phase7.cmd_dirname,
+            "sleep": phase7.cmd_sleep,
+            "env": phase7.cmd_env,
+            "realpath": phase7.cmd_realpath_e,
+        }
+    )
+    return base
 
 
 __all__ = ["CommandImpl", "default_registry"]

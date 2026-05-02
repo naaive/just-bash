@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "basename -a /a/b /c/d",
+  "stderr": "",
+  "stdout": "b\nd\n"
+}

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from just_bash.commands._helpers import parse_flags, read_input, write_err, write_out
+
+_HUMAN_RE = re.compile(r"^([+-]?[\d.]+)([KMGT])?")
 
 if TYPE_CHECKING:
     from just_bash.interpreter.interpreter import IO, Interpreter
@@ -12,7 +15,12 @@ if TYPE_CHECKING:
 
 def cmd_sort(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
     try:
-        flags, paths = parse_flags(argv, boolean={"-r", "-u", "-n", "-f", "-b"})
+        flags, paths = parse_flags(
+            argv,
+            boolean={"-r", "-u", "-n", "-f", "-b", "-h", "-V", "-R"},
+            valued={"-t", "-k"},
+            multi={"-k"},
+        )
     except ValueError as e:
         write_err(io_ctx, f"sort: {e}\n")
         return 2
@@ -22,38 +30,135 @@ def cmd_sort(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
     trailing_nl = text.endswith("\n")
     if trailing_nl:
         lines = lines[:-1]
-    key = lambda s: s  # noqa: E731
-    if flags.get("-f"):
-        original_key = key
-        key = lambda s: original_key(s).lower()  # noqa: E731
-    if flags.get("-b"):
-        original_key2 = key
-        key = lambda s: original_key2(s).lstrip()  # noqa: E731
-    if flags.get("-n"):
+    delim: str | None = None
+    if "-t" in flags:
+        delim = str(flags["-t"])
+    fold = bool(flags.get("-f"))
+    skip_blanks = bool(flags.get("-b"))
+    numeric = bool(flags.get("-n"))
+    human = bool(flags.get("-h"))
+    version = bool(flags.get("-V"))
+    random_order = bool(flags.get("-R"))
 
-        def numkey(s: str) -> tuple[float, str]:
-            stripped = s.lstrip()
-            num: list[str] = []
-            i = 0
-            if stripped[i : i + 1] in ("-", "+"):
-                num.append(stripped[i])
-                i += 1
-            while i < len(stripped) and stripped[i].isdigit():
-                num.append(stripped[i])
-                i += 1
-            try:
-                return (int("".join(num)) if num else 0, s)
-            except ValueError:
-                return (0, s)
+    def field(line: str, spec: str) -> str:
+        """Extract the field selected by spec (e.g. ``2``, ``2,3``, ``2.3``)."""
+        # bash sort key spec: F[.C][OPTS][,F[.C][OPTS]]
+        start_part, _, end_part = spec.partition(",")
+        sf, _, _ = start_part.partition(".")
+        try:
+            start = max(int(sf) - 1, 0)
+        except ValueError:
+            return line
+        if delim is None:
+            parts = line.split()
+        else:
+            parts = line.split(delim)
+        if start >= len(parts):
+            return ""
+        if not end_part:
+            return delim.join(parts[start:]) if delim else " ".join(parts[start:])
+        ef, _, _ = end_part.partition(".")
+        try:
+            end = int(ef)
+        except ValueError:
+            end = start + 1
+        return (delim or " ").join(parts[start:end])
 
+    keys = flags.get("-k")
+    key_specs: list[str] = (keys if isinstance(keys, list) else [keys]) if keys else []
+
+    def base_key(line: str) -> str:
+        if not key_specs:
+            return line
+        out_parts = [field(line, k) for k in key_specs]
+        return "\x00".join(out_parts)
+
+    def transform(s: str) -> str:
+        if skip_blanks:
+            s = s.lstrip()
+        if fold:
+            s = s.lower()
+        return s
+
+    def numkey(line: str) -> tuple[float, str]:
+        s = transform(base_key(line)).lstrip()
+        sign = 1
+        i = 0
+        if s[i : i + 1] == "-":
+            sign = -1
+            i += 1
+        elif s[i : i + 1] == "+":
+            i += 1
+        # Allow ``,`` thousands separators and decimals.
+        digits: list[str] = []
+        seen_dot = False
+        while i < len(s):
+            ch = s[i]
+            if ch.isdigit():
+                digits.append(ch)
+            elif ch == "." and not seen_dot:
+                digits.append(".")
+                seen_dot = True
+            elif ch == ",":
+                pass  # ignored separator
+            else:
+                break
+            i += 1
+        try:
+            num = sign * float("".join(digits)) if digits else 0.0
+        except ValueError:
+            num = 0.0
+        return (num, line)
+
+    def humankey(line: str) -> tuple[float, str]:
+        s = transform(base_key(line)).lstrip()
+        m = _HUMAN_RE.match(s)
+        if m is None:
+            return (0.0, line)
+        n = float(m.group(1))
+        suffix = (m.group(2) or "").upper()
+        mult = {"": 1, "K": 1024, "M": 1024**2, "G": 1024**3, "T": 1024**4}.get(suffix, 1)
+        return (n * mult, line)
+
+    def versionkey(line: str) -> list[object]:
+        s = transform(base_key(line))
+        # Split on runs of digits vs non-digits; compare numerically piece by piece.
+        out: list[object] = []
+        i = 0
+        while i < len(s):
+            if s[i].isdigit():
+                j = i
+                while j < len(s) and s[j].isdigit():
+                    j += 1
+                out.append((1, int(s[i:j])))
+                i = j
+            else:
+                j = i
+                while j < len(s) and not s[j].isdigit():
+                    j += 1
+                out.append((0, s[i:j]))
+                i = j
+        return out
+
+    if random_order:
+        import random as _r
+
+        rng = _r.Random()
+        rng.shuffle(lines)
+    elif numeric:
         lines.sort(key=numkey, reverse=bool(flags.get("-r")))
+    elif human:
+        lines.sort(key=humankey, reverse=bool(flags.get("-r")))
+    elif version:
+        lines.sort(key=versionkey, reverse=bool(flags.get("-r")))
     else:
-        lines.sort(key=key, reverse=bool(flags.get("-r")))
+        lines.sort(key=lambda s: transform(base_key(s)), reverse=bool(flags.get("-r")))
+
     if flags.get("-u"):
         seen: set[str] = set()
         deduped: list[str] = []
         for ln in lines:
-            k = key(ln)
+            k = transform(base_key(ln))
             if k in seen:
                 continue
             seen.add(k)
@@ -62,6 +167,8 @@ def cmd_sort(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
     out = "\n".join(lines) + ("\n" if lines else "")
     write_out(io_ctx, out)
     return rc
+
+
 
 
 def cmd_uniq(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:

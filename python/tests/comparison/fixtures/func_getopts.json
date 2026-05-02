@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "greet() {\n  local name=anon\n  while getopts \"n:\" opt; do\n    case $opt in\n      n) name=$OPTARG ;;\n    esac\n  done\n  echo \"hi $name\"\n}\ngreet -n alice",
+  "stderr": "",
+  "stdout": "hi alice\n"
+}

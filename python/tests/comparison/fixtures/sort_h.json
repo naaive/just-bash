@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf '1K\\n5M\\n100\\n2G\\n' | sort -h",
+  "stderr": "",
+  "stdout": "100\n1K\n5M\n2G\n"
+}

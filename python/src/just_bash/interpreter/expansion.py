@@ -276,6 +276,8 @@ def _read_array_elements(interp: Interpreter, part: ParameterExpansion) -> list[
     name = part.parameter
     if name in ("@", "*"):
         return list(interp.env.positional)
+    if name == "PIPESTATUS":
+        return [str(s) for s in interp.env.last_pipeline_status]
     assoc = interp.env.get_assoc(name)
     if assoc is not None:
         if part.array_keys:

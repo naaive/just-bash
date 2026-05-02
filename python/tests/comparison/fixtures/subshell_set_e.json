@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "set +e; ( exit 7 ); echo rc=$?",
+  "stderr": "",
+  "stdout": "rc=7\n"
+}

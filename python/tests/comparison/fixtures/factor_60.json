@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "factor 60",
+  "stderr": "",
+  "stdout": "60: 2 2 3 5\n"
+}

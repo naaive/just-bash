@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf '3 c\\n1 a\\n2 b\\n' | sort -k1n",
+  "stderr": "",
+  "stdout": "1 a\n2 b\n3 c\n"
+}

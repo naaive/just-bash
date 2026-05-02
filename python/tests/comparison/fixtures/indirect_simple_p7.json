@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "name=alice; ref=name; echo \"${!ref}\"",
+  "stderr": "",
+  "stdout": "alice\n"
+}

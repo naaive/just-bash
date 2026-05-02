@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "a=(\"hi there\" \"world\"); for x in \"${a[@]}\"; do echo \"[$x]\"; done",
+  "stderr": "",
+  "stdout": "[hi there]\n[world]\n"
+}

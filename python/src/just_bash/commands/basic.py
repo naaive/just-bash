@@ -47,8 +47,13 @@ def cmd_cat(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
 
 
 def cmd_ls(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
+    # Drop --color and similar tty-only flags before parsing.
+    cleaned = [a for a in argv if not (a.startswith("--color") or a == "--group-directories-first")]
     try:
-        flags, paths = parse_flags(argv, boolean={"-a", "-A", "-l", "-1", "-d", "-r", "-R", "-F"})
+        flags, paths = parse_flags(
+            cleaned,
+            boolean={"-a", "-A", "-l", "-1", "-d", "-r", "-R", "-F", "-h", "-S", "-t"},
+        )
     except ValueError as e:
         write_err(io_ctx, f"ls: {e}\n")
         return 2
@@ -259,13 +264,20 @@ def cmd_wc(interp: Interpreter, argv: list[str], io_ctx: IO) -> int:
         n_bytes = len(data)
         # Bash's wc widths: a single column reading from stdin is unpadded,
         # otherwise pad to 7. (Real bash also bumps the width for very large
-        # counts; we match the common case which covers all everyday usage.)
-        active = sum(1 for f in (show_lines, show_words, show_bytes or show_chars) if f)
+        # counts; we match the common case.) The width is derived only from
+        # the values that are actually being printed.
+        active_vals: list[int] = []
+        if show_lines:
+            active_vals.append(n_lines)
+        if show_words:
+            active_vals.append(n_words)
+        if show_bytes or show_chars:
+            active_vals.append(n_bytes)
         named = bool(label)
-        if active == 1 and not named:
-            width = len(str(max(n_lines, n_words, n_bytes)))
+        if len(active_vals) == 1 and not named:
+            width = len(str(max(active_vals)))
         else:
-            width = max(7, len(str(max(n_lines, n_words, n_bytes))))
+            width = max(7, len(str(max(active_vals or [0]))))
         cols: list[str] = []
         if show_lines:
             cols.append(f"{n_lines:>{width}}")

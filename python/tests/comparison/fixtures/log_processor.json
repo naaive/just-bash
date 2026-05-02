@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "log=\"2024-01-01 INFO start\n2024-01-01 ERROR boom\n2024-01-02 INFO continue\n2024-01-02 ERROR crash\"\necho \"$log\" | grep ERROR | wc -l",
+  "stderr": "",
+  "stdout": "2\n"
+}
