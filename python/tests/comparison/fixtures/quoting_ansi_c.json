@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf '%s\\n' $'line1\\nline2\\tindented'",
+  "stderr": "",
+  "stdout": "line1\nline2\tindented\n"
+}

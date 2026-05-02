@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "n=5\necho $((n++))\necho $n\necho $((--n))\necho $n",
+  "stderr": "",
+  "stdout": "5\n6\n5\n5\n"
+}

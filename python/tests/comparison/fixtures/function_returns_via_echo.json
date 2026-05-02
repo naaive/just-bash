@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "greet() { echo \"hi $1\"; }\nout=$(greet world)\necho \"[$out]\"",
+  "stderr": "",
+  "stdout": "[hi world]\n"
+}

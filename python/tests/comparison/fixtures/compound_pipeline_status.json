@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "{ echo a; echo b; } | wc -l",
+  "stderr": "",
+  "stdout": "2\n"
+}

@@ -263,6 +263,25 @@ def _expand_parameter_pieces(
             elements = [str(i) for i in range(len(elements))]
         if isinstance(part.operation, Length):
             return [_Piece(str(len(elements)), force_quoted)]
+        if isinstance(part.operation, Substring):
+            from just_bash.interpreter.arithmetic import eval_arith
+
+            offset = eval_arith(interp, part.operation.offset)
+            # Positional parameters (``$@`` / ``$*``) are 1-indexed in bash:
+            # ``${@:2}`` starts at $2. Real arrays remain 0-indexed.
+            is_positional = part.parameter in ("@", "*")
+            if is_positional and offset >= 1:
+                offset -= 1
+            elif offset < 0:
+                offset = max(len(elements) + offset, 0)
+            if part.operation.length is None:
+                elements = elements[offset:]
+            else:
+                length = eval_arith(interp, part.operation.length)
+                if length < 0:
+                    elements = elements[offset : len(elements) + length]
+                else:
+                    elements = elements[offset : offset + length]
         if splat_form == "*" and force_quoted:
             ifs = interp.env.get("IFS") or " \t\n"
             sep = ifs[0] if ifs else " "

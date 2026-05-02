@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "s=\"alpha-beta-gamma\"\necho \"${s/#alpha/A}\"",
+  "stderr": "",
+  "stdout": "A-beta-gamma\n"
+}

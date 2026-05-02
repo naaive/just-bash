@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "arr=(zero one two three four five)\necho \"${arr[*]:2:2}\"",
+  "stderr": "",
+  "stdout": "two three\n"
+}

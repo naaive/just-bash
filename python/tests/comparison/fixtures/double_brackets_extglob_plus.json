@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "shopt -s extglob; eval 'if [[ \"aaa\" == +(a) ]]; then echo plus; else echo no; fi' ",
+  "stderr": "",
+  "stdout": "plus\n"
+}

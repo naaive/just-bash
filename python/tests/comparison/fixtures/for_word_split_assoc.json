@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "declare -A m\nm[a]=1\nm[b]=2\nm[c]=3\ntotal=0\nfor k in a b c; do\n  total=$((total + m[$k]))\ndone\necho \"$total\"",
+  "stderr": "",
+  "stdout": "6\n"
+}

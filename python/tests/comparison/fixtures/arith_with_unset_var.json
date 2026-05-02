@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "unset notset\necho $((notset + 5))",
+  "stderr": "",
+  "stdout": "5\n"
+}

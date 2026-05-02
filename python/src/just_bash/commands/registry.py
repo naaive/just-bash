@@ -20,6 +20,7 @@ from just_bash.commands import (
     phase9,
     phase10,
     phase11,
+    phase12,
     sed_cmd,
     text_utils,
 )
@@ -230,6 +231,48 @@ def default_registry() -> dict[str, CommandImpl]:
             "locale": phase11.cmd_locale,
             "iconv": phase11.cmd_iconv,
             "yq": phase11.cmd_yq,
+        }
+    )
+    # Phase 12: system / package-manager / scheduler stubs.
+    base.update(
+        {
+            "mail": phase12.cmd_mail,
+            "wall": phase12.cmd_wall,
+            "mesg": phase12.cmd_mesg,
+            "finger": phase12.cmd_finger,
+            "at": phase12.cmd_at,
+            "atq": phase12.cmd_atq,
+            "atrm": phase12.cmd_atrm,
+            "batch": phase12.cmd_batch,
+            "crontab": phase12.cmd_crontab,
+            "lp": phase12.cmd_lp,
+            "lpr": phase12.cmd_lpr,
+            "lpstat": phase12.cmd_lpstat,
+            "nice": phase12.cmd_nice,
+            "renice": phase12.cmd_renice,
+            "nohup": phase12.cmd_nohup,
+            "apt": phase12.cmd_apt,
+            "apt-get": phase12.cmd_apt_get,
+            "dpkg": phase12.cmd_dpkg,
+            "yum": phase12.cmd_yum,
+            "dnf": phase12.cmd_dnf,
+            "rpm": phase12.cmd_rpm,
+            "pip": phase12.cmd_pip,
+            "pip3": phase12.cmd_pip3,
+            "npm": phase12.cmd_npm,
+            "pnpm": phase12.cmd_pnpm,
+            "yarn": phase12.cmd_yarn,
+            "brew": phase12.cmd_brew,
+            "cargo": phase12.cmd_cargo,
+            "screen": phase12.cmd_screen,
+            "tmux": phase12.cmd_tmux,
+            "ipcs": phase12.cmd_ipcs,
+            "ipcrm": phase12.cmd_ipcrm,
+            "ipcmk": phase12.cmd_ipcmk,
+            "lastlog": phase12.cmd_lastlog,
+            "runuser": phase12.cmd_runuser,
+            "su": phase12.cmd_su,
+            "sudo": phase12.cmd_sudo,
         }
     )
     return base

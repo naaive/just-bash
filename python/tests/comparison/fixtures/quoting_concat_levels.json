@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "x=dollar\necho 'a''b'\"c\"\"$x\"",
+  "stderr": "",
+  "stdout": "abcdollar\n"
+}

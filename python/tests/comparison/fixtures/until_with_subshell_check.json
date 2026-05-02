@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "n=0\nuntil [[ $n -ge 3 ]]; do\n  n=$((n + 1))\n  echo \"n=$n\"\ndone",
+  "stderr": "",
+  "stdout": "n=1\nn=2\nn=3\n"
+}

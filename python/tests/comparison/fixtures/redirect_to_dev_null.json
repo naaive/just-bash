@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "echo silenced > /dev/null\necho visible",
+  "stderr": "",
+  "stdout": "visible\n"
+}

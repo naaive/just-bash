@@ -77,7 +77,12 @@ def _eval_binary(interp: Interpreter, op: str, left: Word, right: Word) -> bool:
         # distinguishes literal/escaped via the Word AST so ``expand_pattern``
         # gets it right.
         pattern = expand_pattern(interp, right)
-        matched = fnmatch.fnmatchcase(lv, pattern)
+        if any(c in pattern for c in "?*+@!") and "(" in pattern:
+            from just_bash.interpreter.extglob import extglob_match
+
+            matched = extglob_match(lv, pattern)
+        else:
+            matched = fnmatch.fnmatchcase(lv, pattern)
         return matched if op != "!=" else not matched
     rv = expand_word_no_split(interp, right)
     if op == "<":

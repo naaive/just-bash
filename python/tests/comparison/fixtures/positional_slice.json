@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "set -- a b c d e\necho \"$@\"\necho \"${@:2}\"\necho \"${@:2:2}\"",
+  "stderr": "",
+  "stdout": "a b c d e\nb c d e\nb c\n"
+}
