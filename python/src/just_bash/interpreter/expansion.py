@@ -572,27 +572,36 @@ def _escape_glob(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _glob_match(value: str, pattern: str) -> bool:
+    """Anchored glob match honouring extglob extensions."""
+    from just_bash.interpreter.extglob import extglob_match
+
+    if any(c in pattern for c in "@?+*!") and "(" in pattern:
+        return extglob_match(value, pattern)
+    return fnmatch.fnmatchcase(value, pattern)
+
+
 def _strip_pattern(s: str, pattern: str, *, side: str, greedy: bool) -> str:
     if not pattern:
         return s
     if side == "prefix":
         if greedy:
             for i in range(len(s), -1, -1):
-                if fnmatch.fnmatchcase(s[:i], pattern):
+                if _glob_match(s[:i], pattern):
                     return s[i:]
         else:
             for i in range(len(s) + 1):
-                if fnmatch.fnmatchcase(s[:i], pattern):
+                if _glob_match(s[:i], pattern):
                     return s[i:]
         return s
     # suffix
     if greedy:
         for i in range(0, len(s) + 1):
-            if fnmatch.fnmatchcase(s[i:], pattern):
+            if _glob_match(s[i:], pattern):
                 return s[:i]
     else:
         for i in range(len(s), -1, -1):
-            if fnmatch.fnmatchcase(s[i:], pattern):
+            if _glob_match(s[i:], pattern):
                 return s[:i]
     return s
 

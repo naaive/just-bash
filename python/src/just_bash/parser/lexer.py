@@ -287,6 +287,13 @@ class Lexer:
             ch = self._peek_char()
             if ch in (" ", "\t", "\n"):
                 break
+            # Extglob ``?( | * | + | @ | ! ) (`` keeps the ``(...)`` body as
+            # part of the word; without this the case-pattern parser sees
+            # the inner ``(`` as a separator.
+            if ch in "?*+@!" and self._peek_char(1) == "(":
+                out.append(self._advance())
+                out.append(self._read_balanced("(", ")"))
+                continue
             if ch in _SINGLE_CHAR_OPS:
                 break
             # Backslash escape outside any quote.

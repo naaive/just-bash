@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "arr=(c a b c a d)\nprintf '%s\\n' \"${arr[@]}\" | sort -u",
+  "stderr": "",
+  "stdout": "a\nb\nc\nd\n"
+}

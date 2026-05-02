@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "declare -A m\nm[a]=10\nm[b]=20\ntotal=0\nfor k in a b; do\n  ((total += m[$k]))\ndone\necho \"$total\"",
+  "stderr": "",
+  "stdout": "30\n"
+}

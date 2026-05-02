@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "declare -A v\nv[name]=alice\nv[age]=30\ntemplate='hi ${name} (${age})'\nout=$template\nfor k in \"${!v[@]}\"; do\n  out=${out//\\$\\{$k\\}/${v[$k]}}\ndone\necho \"$out\"",
+  "stderr": "",
+  "stdout": "hi alice (30)\n"
+}

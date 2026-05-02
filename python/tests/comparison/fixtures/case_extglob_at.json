@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "shopt -s extglob; eval 'case alpha in @(alpha|beta)) echo match;; *) echo no;; esac'",
+  "stderr": "",
+  "stdout": "match\n"
+}

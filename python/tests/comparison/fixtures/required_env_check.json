@@ -1,0 +1,7 @@
+{
+  "exitCode": 1,
+  "files": {},
+  "script": "required=(NAME PORT LOG)\nNAME=app\nPORT=80\nmissing=()\nfor v in \"${required[@]}\"; do\n  if [[ -z ${!v:-} ]]; then\n    missing+=(\"$v\")\n  fi\ndone\nif (( ${#missing[@]} == 0 )); then\n  echo ok\nelse\n  echo \"missing: ${missing[*]}\" >&2\n  exit 1\nfi",
+  "stderr": "missing: LOG\n",
+  "stdout": ""
+}

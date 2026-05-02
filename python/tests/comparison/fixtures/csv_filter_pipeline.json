@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "printf 'name,score\\nalice,75\\nbob,40\\ncarol,90\\n' \\\n  | tail -n +2 \\\n  | awk -F, '$2 > 50 {print $1}' \\\n  | sort",
+  "stderr": "",
+  "stdout": "alice\ncarol\n"
+}

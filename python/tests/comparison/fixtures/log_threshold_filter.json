@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "declare -A rank\nrank[DEBUG]=10\nrank[INFO]=20\nrank[WARN]=30\nrank[ERROR]=40\nthreshold=${rank[INFO]}\nfor line in \"DEBUG x\" \"INFO y\" \"WARN z\" \"ERROR q\"; do\n  level=${line%% *}\n  lvl=${rank[$level]:-0}\n  if (( lvl >= threshold )); then\n    echo \"$line\"\n  fi\ndone",
+  "stderr": "",
+  "stdout": "INFO y\nWARN z\nERROR q\n"
+}

@@ -272,6 +272,10 @@ class ArithNumber:
 @dataclass(slots=True)
 class ArithVariable:
     name: str
+    # ``arr[expr]`` access inside ``$((...))`` / ``((...))``. The subscript
+    # holds the raw text between the brackets; evaluator re-parses it as an
+    # arithmetic sub-expression after expanding any inner ``$VAR`` etc.
+    subscript: str | None = None
 
 
 @dataclass(slots=True)

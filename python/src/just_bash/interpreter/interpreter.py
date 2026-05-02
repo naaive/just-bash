@@ -321,12 +321,17 @@ class Interpreter:
 
     def _run_case(self, node: Case, io_ctx: IO) -> int:
         target = expand_word_no_split(self, node.word)
+        import fnmatch as _fn
+
+        from just_bash.interpreter.extglob import extglob_match
+
         for item in node.items:
             for pattern_word in item.patterns:
                 pattern = expand_pattern(self, pattern_word)
-                import fnmatch
-
-                if fnmatch.fnmatchcase(target, pattern):
+                if any(c in pattern for c in "@?+*!") and "(" in pattern:
+                    if extglob_match(target, pattern):
+                        return self._exec_block(item.body, io_ctx)
+                elif _fn.fnmatchcase(target, pattern):
                     return self._exec_block(item.body, io_ctx)
         return 0
 
@@ -522,7 +527,13 @@ class Interpreter:
             self.interp = interp
             self.redirs = redirs
             self.io_ctx = io_ctx
-            self.new_io = IO(stdin=io_ctx.stdin, stdout=io_ctx.stdout, stderr=io_ctx.stderr)
+            # Reuse the parent IO when there are no redirections so that
+            # stdin consumption (e.g. by ``read``) persists back to the caller
+            # — bash uses real file descriptors which carry that state.
+            if redirs:
+                self.new_io = IO(stdin=io_ctx.stdin, stdout=io_ctx.stdout, stderr=io_ctx.stderr)
+            else:
+                self.new_io = io_ctx
             self._writes: list[tuple[str, bytes, bool]] = []  # (path, content, append)
 
         def __enter__(self) -> IO:

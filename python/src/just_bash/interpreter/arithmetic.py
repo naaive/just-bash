@@ -59,6 +59,25 @@ def _eval(interp: Interpreter, node: ArithExpr) -> int:
     if isinstance(node, ArithNumber):
         return node.value
     if isinstance(node, ArithVariable):
+        if node.subscript is not None:
+            # ``arr[k]`` array element access. Evaluate the subscript first
+            # (it may itself reference variables / ``$()``), then look up.
+            from just_bash.interpreter.expansion import expand_word_no_split
+            from just_bash.parser.word_parser import parse_word
+
+            sub_word = parse_word(node.subscript)
+            key = expand_word_no_split(interp, sub_word).strip()
+            assoc = interp.env.get_assoc(node.name)
+            if assoc is not None:
+                return _coerce_int(assoc.get(key, ""))
+            arr = interp.env.get_array(node.name)
+            try:
+                idx = int(key)
+            except ValueError:
+                idx = 0
+            if arr is None:
+                return _read_var(interp, node.name) if idx == 0 else 0
+            return _coerce_int(arr[idx]) if 0 <= idx < len(arr) else 0
         return _read_var(interp, node.name)
     if isinstance(node, ArithGroup):
         return _eval(interp, node.expression)

@@ -1,0 +1,7 @@
+{
+  "exitCode": 0,
+  "files": {},
+  "script": "arr=(10 20 30); ((sum = arr[0] + arr[1] + arr[2])); echo \"$sum\"",
+  "stderr": "",
+  "stdout": "60\n"
+}

@@ -18,6 +18,7 @@ from just_bash.commands import (
     phase7,
     phase8,
     phase9,
+    phase10,
     sed_cmd,
     text_utils,
 )
@@ -189,6 +190,23 @@ def default_registry() -> dict[str, CommandImpl]:
             "dmesg": phase9.cmd_dmesg,
             "uptime": phase9.cmd_uptime,
             "csplit": phase9.cmd_csplit,
+        }
+    )
+    # Phase 10: pagers, hex, encoding, BLAKE3, archive helpers.
+    base.update(
+        {
+            "more": phase10.cmd_more,
+            "less": phase10.cmd_less,
+            "pager": phase10.cmd_pager,
+            "col": phase10.cmd_col,
+            "b3sum": phase10.cmd_b3sum,
+            "od": phase10.cmd_od,
+            "units": phase10.cmd_units,
+            "setaf": phase10.cmd_setaf,
+            "md5": phase10.cmd_md5,
+            "zcat": phase10.cmd_zcat,
+            "gzip": phase10.cmd_gzip,
+            "gunzip": phase10.cmd_gunzip,
         }
     )
     return base

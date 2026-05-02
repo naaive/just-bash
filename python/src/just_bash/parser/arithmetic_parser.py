@@ -311,6 +311,24 @@ class _Parser:
             j += 1
         name = self.text[self.pos : j]
         self.pos = j
+        # Optional ``[subscript]`` for array element access.
+        if self.pos < len(self.text) and self.text[self.pos] == "[":
+            depth = 1
+            k = self.pos + 1
+            while k < len(self.text) and depth > 0:
+                ch = self.text[k]
+                if ch == "[":
+                    depth += 1
+                elif ch == "]":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                k += 1
+            if k >= len(self.text):
+                raise ArithParseError("unterminated [...] in arithmetic")
+            subscript = self.text[self.pos + 1 : k]
+            self.pos = k + 1
+            return ArithVariable(name=name, subscript=subscript)
         return ArithVariable(name=name)
 
 
