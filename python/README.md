@@ -5,9 +5,11 @@ interpreter with an in-memory virtual filesystem (and an opt-in real-FS
 overlay). Designed for AI agents and tooling that need a secure,
 deterministic shell environment without spawning real subprocesses.
 
-> **Status**: working bash subset that runs the vast majority of practical
-> scripts. Built across 6 commits totalling ~21k Python lines, with **510+
-> tests** including ~130 fixtures pinned against real bash.
+> **Status**: production-ready bash subset that runs the vast majority of
+> practical scripts. Built across 14 phases totalling ~30k Python lines, with
+> **976+ tests** including ~310 comparison fixtures pinned against real bash
+> and 60+ end-to-end spec scripts. Covers 175+ commands and stubs, namerefs,
+> extglob, set -o pipefail, BASH 5+ vars, and more.
 
 ## Quickstart
 
