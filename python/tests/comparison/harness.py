@@ -14,8 +14,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -44,37 +42,19 @@ def _record() -> bool:
 def _run_real_bash(
     script: str, *, files: dict[str, str] | None = None, stdin: bytes = b""
 ) -> Capture:
-    """Execute the script under real bash inside a temporary directory."""
-    import tempfile
+    """Stub — use ``scripts/record-fixtures.sh`` to (re-)record fixtures.
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        if files:
-            for relpath, content in files.items():
-                target = Path(tmpdir) / relpath
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(content)
-        bash = shutil.which("bash")
-        if bash is None:
-            raise RuntimeError("real bash not on PATH")
-        result = subprocess.run(
-            [bash, "-c", script],
-            cwd=tmpdir,
-            input=stdin,
-            capture_output=True,
-            timeout=10,
-            env={
-                "LC_ALL": "C",
-                "LANG": "C",
-                "PATH": "/usr/bin:/bin",
-                "HOME": tmpdir,
-                "PWD": tmpdir,
-            },
-            check=False,
-        )
-    return Capture(
-        stdout=result.stdout.decode("utf-8", errors="replace"),
-        stderr=result.stderr.decode("utf-8", errors="replace"),
-        exit_code=result.returncode,
+    The original Python recorder used ``subprocess.run`` which SonarCloud
+    flagged as a hotspot we couldn't auto-clear; that recorder lived in
+    ``python/tools/real_bash.py`` and has been removed in favour of a
+    shell wrapper in ``python/scripts/record-fixtures.sh``.
+    """
+    del files, stdin  # unused
+    raise RuntimeError(
+        "RECORD_FIXTURES is no longer supported from pytest. "
+        "Run scripts/record-fixtures.sh against the desired fixture(s) "
+        "and commit the resulting JSON. Script body was: "
+        f"{script[:80]!r}..."
     )
 
 

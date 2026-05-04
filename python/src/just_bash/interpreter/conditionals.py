@@ -101,11 +101,35 @@ def _translate_posix_classes(regex: str) -> str:
     return "".join(out)
 
 
+def _expand_regex_rhs(interp: Interpreter, word: Word) -> str:
+    """Expand a Word for use as a regex RHS.
+
+    Acts like ``expand_word_no_split`` but turns ``Escaped(value=c)`` parts
+    into ``\\c`` so the regex engine sees the backslash bash promised.
+    """
+    from just_bash.ast.nodes import Escaped
+    from just_bash.interpreter.expansion import _expand_to_pieces
+
+    out: list[str] = []
+    for part in word.parts:
+        if isinstance(part, Escaped):
+            out.append("\\" + part.value)
+            continue
+        # Re-use the standard expander for everything else (literals,
+        # quoted strings, parameter expansion, command substitution, ...).
+        sub = type(word)(line=word.line, parts=[part])
+        pieces = _expand_to_pieces(interp, sub, force_quoted=True)
+        out.append("".join(p.text for p in pieces))
+    return "".join(out)
+
+
 def _eval_binary(interp: Interpreter, op: str, left: Word, right: Word) -> bool:
     lv = expand_word_no_split(interp, left)
     if op == "=~":
-        # Right side stays as a regex string, no glob escaping.
-        rv = expand_word_no_split(interp, right)
+        # Right side is a regex: bash keeps backslashes literal so the regex
+        # engine sees ``\*`` etc. unmodified. Expand parameter references but
+        # restore the backslash that the word parser stripped from ``\X``.
+        rv = _expand_regex_rhs(interp, right)
         rv = _translate_posix_classes(rv)
         try:
             m = re.search(rv, lv)
@@ -150,6 +174,41 @@ def _eval_binary(interp: Interpreter, op: str, left: Word, right: Word) -> bool:
             "-gt": ln > rn,
             "-ge": ln >= rn,
         }[op]
+    if op in ("-nt", "-ot", "-ef"):
+        # File-comparison ops: ``-nt`` (lhs newer than rhs), ``-ot``
+        # (older), ``-ef`` (same inode). Missing files compare as
+        # non-existent (oldest).
+        from just_bash.fs.vfs import FsError
+
+        def _mtime(path: str) -> float | None:
+            try:
+                node = interp.fs.stat(path)
+            except FsError:
+                return None
+            return getattr(node, "mtime", 0.0)
+
+        lt = _mtime(lv)
+        rt = _mtime(rv)
+        if op == "-nt":
+            if lt is None:
+                return False
+            if rt is None:
+                return True
+            return lt > rt
+        if op == "-ot":
+            if rt is None:
+                return False
+            if lt is None:
+                return True
+            return lt < rt
+        # -ef: in our VFS each path uniquely identifies a node (no
+        # hardlinks), so equal-canonical-paths is a fair proxy.
+        try:
+            l_canon = interp.fs._resolve(lv)  # type: ignore[attr-defined]
+            r_canon = interp.fs._resolve(rv)  # type: ignore[attr-defined]
+        except Exception:
+            return False
+        return l_canon == r_canon
     raise InterpreterError(f"unsupported binary test operator: {op}")
 
 

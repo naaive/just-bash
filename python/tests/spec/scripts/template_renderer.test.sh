@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # A {{ name }} -> value template renderer using parameter expansion + sed.
 
-declare -A vars
-vars[name]=alice
-vars[project]=just-bash
-vars[year]=2026
+declare -A vars=(
+  [name]=alice
+  [project]=just-bash
+  [year]=2026
+)
 
 render() {
   local template=$1

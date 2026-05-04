@@ -22,6 +22,7 @@ from just_bash.commands import (
     phase11,
     phase12,
     phase13,
+    phase20,
     sed_cmd,
     text_utils,
 )
@@ -310,6 +311,13 @@ def default_registry() -> dict[str, CommandImpl]:
             "systemctl": phase13.cmd_systemctl,
             "journalctl": phase13.cmd_journalctl,
             "service": phase13.cmd_service,
+        }
+    )
+    # Phase 20: re-entrant ``bash`` / ``sh`` dispatcher.
+    base.update(
+        {
+            "bash": phase20.cmd_bash,
+            "sh": phase20.cmd_sh,
         }
     )
     return base

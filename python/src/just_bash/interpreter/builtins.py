@@ -766,6 +766,24 @@ def _b_declare(interp: Interpreter, argv: list[str], _io: IO) -> int:
     if args and args[0] == "--":
         args = args[1:]
     for arg in args:
+        # ``name=(elem elem ...)`` compound array literal — produced by the
+        # parser when it sees ``declare -A name=(...)``. Split into the
+        # name and the inner element list, then dispatch by indexed vs
+        # associative.
+        if "=(" in arg and arg.endswith(")"):
+            head, _, body = arg.partition("=(")
+            inner = body[:-1]  # strip trailing ')'
+            elems = _split_compound_array(inner)
+            if assoc:
+                interp.env.declare_assoc(head, exported=exported)
+                for elem in elems:
+                    if elem.startswith("[") and "]=" in elem:
+                        key_part, _, val_part = elem.partition("]=")
+                        key = key_part.lstrip("[")
+                        interp.env.set_assoc_element(head, key, val_part)
+                continue
+            interp.env.set_array(head, elems, exported=exported, local=is_local)
+            continue
         if "=" in arg:
             name, _, value = arg.partition("=")
             if nameref:
@@ -790,6 +808,15 @@ def _b_declare(interp: Interpreter, argv: list[str], _io: IO) -> int:
         else:
             interp.env.set_var(arg, "", exported=exported)
     return 0
+
+
+def _split_compound_array(body: str) -> list[str]:
+    """Split a ``[k]=v\\x00[k2]=v2`` compound array body into elements.
+
+    The parser joins elements with NUL so values containing whitespace
+    survive expansion intact. Empty fragments are dropped.
+    """
+    return [e for e in body.split("\x00") if e]
 
 
 _VALID_SIGNALS = frozenset(

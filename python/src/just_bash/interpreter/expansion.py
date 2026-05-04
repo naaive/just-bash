@@ -67,12 +67,11 @@ def expand_word(interp: Interpreter, word: Word) -> list[str]:
         pieces = _expand_to_pieces(interp, w)
         # Step 6: word-split unquoted pieces on $IFS.
         split = _word_split(pieces, interp.env.get("IFS"))
-        # Step 7: glob each split, unless any part of that field was quoted.
-        for raw, had_quoted in split:
-            if had_quoted:
-                out.append(raw)
-                continue
-            globbed = _glob(interp, raw)
+        # Step 7: glob each split using the field's pattern (which has
+        # quoted chars pre-escaped). Falls back to the raw text when the
+        # glob has no matches (or when the pattern has no glob meta).
+        for raw, pattern, _had_quoted in split:
+            globbed = _glob(interp, pattern)
             out.extend(globbed if globbed else [raw])
     return out
 
@@ -566,63 +565,93 @@ def _expand_command_sub(interp: Interpreter, part: CommandSubstitution) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _word_split(pieces: list[_Piece], ifs: str | None) -> list[tuple[str, bool]]:
+@dataclass(slots=True)
+class _SplitState:
+    """Mutable accumulator threaded through ``_word_split``."""
+
+    fields: list[tuple[str, str, bool]]
+    current: str = ""
+    pattern: str = ""
+    had_quoted: bool = False
+
+    def flush(self) -> None:
+        if self.current or self.had_quoted:
+            self.fields.append((self.current, self.pattern, self.had_quoted))
+            self.current = ""
+            self.pattern = ""
+            self.had_quoted = False
+
+    def add_quoted(self, text: str) -> None:
+        self.current += text
+        self.pattern += _escape_glob(text)
+        self.had_quoted = True
+
+    def add_literal(self, text: str) -> None:
+        self.current += text
+        self.pattern += text
+
+
+def _word_split(pieces: list[_Piece], ifs: str | None) -> list[tuple[str, str, bool]]:
     """Split an unquoted ``$IFS`` run into separate fields.
 
-    Returns a list of ``(field_text, had_quoted_part)`` pairs. Quoted pieces
-    contribute their full text and never start a new field on their own
-    boundaries, but a piece marked ``end_field`` always closes the current
-    field (used for ``"${arr[@]}"`` boundaries).
+    Returns a list of ``(field_text, glob_pattern, had_quoted_part)``
+    triples. ``glob_pattern`` mirrors ``field_text`` but with glob meta
+    chars from quoted pieces escaped, so a later ``glob()`` step honours
+    ``"$dir"/*`` (the ``*`` should still expand) without expanding glob
+    meta that came from inside a quoted string.
     """
     if ifs is None:
         ifs = " \t\n"
     if not pieces:
-        return [("", False)]
-    fields: list[tuple[str, bool]] = []
-    current = ""
-    had_quoted = False
+        return [("", "", False)]
+    state = _SplitState(fields=[])
     for piece in pieces:
-        text, quoted = piece.text, piece.quoted
-        if quoted and not piece.end_field:
-            current += text
-            had_quoted = True
-            continue
         if piece.end_field:
-            # Array-element boundary: emit (text + current) and break field.
-            current += text
-            had_quoted = had_quoted or quoted
-            fields.append((current, had_quoted))
-            current = ""
-            had_quoted = False
-            continue
-        # Walk text char-by-char looking for IFS chars.
-        i = 0
-        while i < len(text):
-            ch = text[i]
-            if ch in ifs:
-                # End current field if non-empty.
-                if current or had_quoted:
-                    fields.append((current, had_quoted))
-                    current = ""
-                    had_quoted = False
-                # Skip whitespace IFS run.
-                if ch in " \t\n":
-                    while i < len(text) and text[i] in " \t\n":
-                        i += 1
-                    continue
-                i += 1
+            _split_emit_array_boundary(state, piece)
+        elif piece.quoted:
+            state.add_quoted(piece.text)
+        else:
+            _split_walk_unquoted(state, piece.text, ifs)
+    state.flush()
+    if state.fields:
+        return state.fields
+    # Bash semantics: unquoted empty expansions produce ZERO fields,
+    # but a literal ``""`` (or any quoted piece) keeps one empty field.
+    if any(p.quoted for p in pieces):
+        return [("", "", True)]
+    return []
+
+
+def _split_emit_array_boundary(state: _SplitState, piece: _Piece) -> None:
+    """Close the current field at an array-element boundary."""
+    if piece.quoted:
+        state.add_quoted(piece.text)
+    else:
+        state.add_literal(piece.text)
+    state.fields.append((state.current, state.pattern, state.had_quoted))
+    state.current = ""
+    state.pattern = ""
+    state.had_quoted = False
+
+
+def _split_walk_unquoted(state: _SplitState, text: str, ifs: str) -> None:
+    """Scan an unquoted run, splitting on IFS characters."""
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch in ifs:
+            state.flush()
+            # Whitespace IFS chars run-coalesce; non-whitespace IFS chars
+            # split a single empty field per occurrence (POSIX rule).
+            if ch in " \t\n":
+                while i < len(text) and text[i] in " \t\n":
+                    i += 1
                 continue
-            current += ch
             i += 1
-    if current or had_quoted:
-        fields.append((current, had_quoted))
-    if not fields:
-        # Bash semantics: unquoted empty expansions produce ZERO fields,
-        # but a literal ``""`` (or any quoted piece) keeps one empty field.
-        if any(p.quoted for p in pieces):
-            return [("", True)]
-        return []
-    return fields
+            continue
+        state.current += ch
+        state.pattern += ch
+        i += 1
 
 
 # ---------------------------------------------------------------------------

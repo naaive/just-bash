@@ -42,6 +42,9 @@ from just_bash.ast.nodes import (
     While,
     Word,
 )
+from just_bash.ast.nodes import (
+    Literal as _LiteralNode,
+)
 from just_bash.parser.arithmetic_parser import parse_arith_text
 from just_bash.parser.lexer import Lexer, Token, TokenKind
 from just_bash.parser.word_parser import parse_word
@@ -81,6 +84,11 @@ _RESERVED_WORDS = frozenset(
     }
 )
 _TERMINATORS = frozenset({";", "\n", "&"})
+
+# Commands whose ``NAME=...`` arguments are part of an assignment context.
+# Mirrors ``Interpreter._ASSIGN_CONTEXT_CMDS`` — kept in the parser so we can
+# recognise ``declare -A m=([k]=v ...)`` compound initialisers.
+_ASSIGN_CONTEXT_NAMES = frozenset({"declare", "typeset", "local", "export", "readonly"})
 _BINARY_COND_OPS = frozenset(
     {"=", "==", "!=", "=~", "<", ">", "-eq", "-ne", "-lt", "-le", "-gt", "-ge", "-nt", "-ot", "-ef"}
 )
@@ -395,6 +403,46 @@ class Parser:
                 if first_word and name is None:
                     name = w
                 else:
+                    # ``declare -A NAME=(elem ...)`` — when we're in an
+                    # assignment-context command and an arg ends with ``=``
+                    # or ``+=`` immediately followed by ``(``, gather the
+                    # compound array literal back into a single arg string
+                    # so the builtin can re-parse it.
+                    if (
+                        name is not None
+                        and len(name.parts) == 1
+                        and isinstance(name.parts[0], _LiteralNode)
+                        and name.parts[0].value in _ASSIGN_CONTEXT_NAMES
+                        and (tok.text.endswith("=") or tok.text.endswith("+="))
+                        and self._peek().kind is TokenKind.OPERATOR
+                        and self._peek().text == "("
+                    ):
+                        self._next()  # consume "("
+                        words: list[str] = [tok.text, "("]
+                        while True:
+                            nxt = self._peek()
+                            if nxt.kind is TokenKind.OPERATOR and nxt.text == ")":
+                                self._next()
+                                words.append(")")
+                                break
+                            if nxt.kind is TokenKind.NEWLINE:
+                                self._next()
+                                continue
+                            if nxt.kind is TokenKind.EOF:
+                                raise ParseError("unterminated compound array literal", nxt)
+                            if nxt.kind is TokenKind.WORD:
+                                words.append(nxt.text)
+                                self._next()
+                                continue
+                            raise ParseError("unexpected token in compound array literal", nxt)
+                        # Re-emit as a single word so ``_b_declare`` sees the
+                        # full ``name=(elem elem)`` string. Elements are
+                        # joined with NUL (\x00) so values containing real
+                        # whitespace survive expansion + re-splitting.
+                        glued = words[0] + "(" + "\x00".join(words[2:-1]) + ")"
+                        args.append(parse_word(glued, line=tok.line))
+                        first_word = False
+                        continue
                     args.append(w)
                 first_word = False
                 continue
@@ -566,15 +614,33 @@ class Parser:
             Statement as _St,
         )
 
-        def _arith_stmt(text: str, default: str = "1") -> _St:
+        def _arith_stmt(text: str, *, default: str = "1", set_e_safe: bool = False) -> _St:
             text = text.strip() or default
             expr = parse_arith_text(text)
             cmd = _AC(expression=expr, line=line)
-            return _St(pipelines=[_Pi(commands=[cmd], line=line)], line=line)
+            return _St(
+                pipelines=[_Pi(commands=[cmd], line=line)],
+                line=line,
+                set_e_safe=set_e_safe,
+            )
 
-        init_stmt = _arith_stmt(init_text, default="0")
-        cond_stmt = _arith_stmt(cond_text, default="1")
-        step_stmt = _arith_stmt(step_text, default="0")
+        # init/cond/step run for their side effects or as loop machinery;
+        # bash exempts them from ``set -e`` (only the body's statements
+        # count toward errexit).
+        init_stmt = _arith_stmt(init_text, default="0", set_e_safe=True)
+        cond_stmt = _arith_stmt(cond_text, default="1", set_e_safe=True)
+        step_stmt = _arith_stmt(step_text, default="0", set_e_safe=True)
+        # A trailing ``:`` no-op keeps the loop body's last exit code at 0
+        # so the for-loop as a whole reports success even if the step's
+        # arithmetic value is zero (which would otherwise be rc=1).
+        from just_bash.ast.nodes import SimpleCommand as _SC
+
+        noop_cmd = _SC(name=parse_word(":", line=line), line=line)
+        noop_stmt = _St(
+            pipelines=[_Pi(commands=[noop_cmd], line=line)],
+            line=line,
+            set_e_safe=True,
+        )
         # Skip optional ``;`` and newlines, expect ``do``.
         self._skip_newlines()
         if self._peek().kind is TokenKind.OPERATOR and self._peek().text == ";":
@@ -591,7 +657,7 @@ class Parser:
 
         wh = _Wh(
             condition=[cond_stmt],
-            body=[*body, step_stmt],
+            body=[*body, step_stmt, noop_stmt],
             line=line,
         )
         wh_stmt = _St(pipelines=[_Pi(commands=[wh], line=line)], line=line)
