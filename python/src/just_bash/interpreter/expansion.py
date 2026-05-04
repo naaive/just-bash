@@ -565,6 +565,32 @@ def _expand_command_sub(interp: Interpreter, part: CommandSubstitution) -> str:
 # ---------------------------------------------------------------------------
 
 
+@dataclass(slots=True)
+class _SplitState:
+    """Mutable accumulator threaded through ``_word_split``."""
+
+    fields: list[tuple[str, str, bool]]
+    current: str = ""
+    pattern: str = ""
+    had_quoted: bool = False
+
+    def flush(self) -> None:
+        if self.current or self.had_quoted:
+            self.fields.append((self.current, self.pattern, self.had_quoted))
+            self.current = ""
+            self.pattern = ""
+            self.had_quoted = False
+
+    def add_quoted(self, text: str) -> None:
+        self.current += text
+        self.pattern += _escape_glob(text)
+        self.had_quoted = True
+
+    def add_literal(self, text: str) -> None:
+        self.current += text
+        self.pattern += text
+
+
 def _word_split(pieces: list[_Piece], ifs: str | None) -> list[tuple[str, str, bool]]:
     """Split an unquoted ``$IFS`` run into separate fields.
 
@@ -578,57 +604,54 @@ def _word_split(pieces: list[_Piece], ifs: str | None) -> list[tuple[str, str, b
         ifs = " \t\n"
     if not pieces:
         return [("", "", False)]
-    fields: list[tuple[str, str, bool]] = []
-    current = ""
-    pattern = ""
-    had_quoted = False
+    state = _SplitState(fields=[])
     for piece in pieces:
-        text, quoted = piece.text, piece.quoted
-        if quoted and not piece.end_field:
-            current += text
-            pattern += _escape_glob(text)
-            had_quoted = True
-            continue
         if piece.end_field:
-            # Array-element boundary: emit (text + current) and break field.
-            current += text
-            pattern += _escape_glob(text) if quoted else text
-            had_quoted = had_quoted or quoted
-            fields.append((current, pattern, had_quoted))
-            current = ""
-            pattern = ""
-            had_quoted = False
-            continue
-        # Walk text char-by-char looking for IFS chars.
-        i = 0
-        while i < len(text):
-            ch = text[i]
-            if ch in ifs:
-                # End current field if non-empty.
-                if current or had_quoted:
-                    fields.append((current, pattern, had_quoted))
-                    current = ""
-                    pattern = ""
-                    had_quoted = False
-                # Skip whitespace IFS run.
-                if ch in " \t\n":
-                    while i < len(text) and text[i] in " \t\n":
-                        i += 1
-                    continue
-                i += 1
+            _split_emit_array_boundary(state, piece)
+        elif piece.quoted:
+            state.add_quoted(piece.text)
+        else:
+            _split_walk_unquoted(state, piece.text, ifs)
+    state.flush()
+    if state.fields:
+        return state.fields
+    # Bash semantics: unquoted empty expansions produce ZERO fields,
+    # but a literal ``""`` (or any quoted piece) keeps one empty field.
+    if any(p.quoted for p in pieces):
+        return [("", "", True)]
+    return []
+
+
+def _split_emit_array_boundary(state: _SplitState, piece: _Piece) -> None:
+    """Close the current field at an array-element boundary."""
+    if piece.quoted:
+        state.add_quoted(piece.text)
+    else:
+        state.add_literal(piece.text)
+    state.fields.append((state.current, state.pattern, state.had_quoted))
+    state.current = ""
+    state.pattern = ""
+    state.had_quoted = False
+
+
+def _split_walk_unquoted(state: _SplitState, text: str, ifs: str) -> None:
+    """Scan an unquoted run, splitting on IFS characters."""
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch in ifs:
+            state.flush()
+            # Whitespace IFS chars run-coalesce; non-whitespace IFS chars
+            # split a single empty field per occurrence (POSIX rule).
+            if ch in " \t\n":
+                while i < len(text) and text[i] in " \t\n":
+                    i += 1
                 continue
-            current += ch
-            pattern += ch
             i += 1
-    if current or had_quoted:
-        fields.append((current, pattern, had_quoted))
-    if not fields:
-        # Bash semantics: unquoted empty expansions produce ZERO fields,
-        # but a literal ``""`` (or any quoted piece) keeps one empty field.
-        if any(p.quoted for p in pieces):
-            return [("", "", True)]
-        return []
-    return fields
+            continue
+        state.current += ch
+        state.pattern += ch
+        i += 1
 
 
 # ---------------------------------------------------------------------------

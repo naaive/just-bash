@@ -521,52 +521,65 @@ class Interpreter:
 
     def _apply_assignment(self, assn: Assignment, *, exported: bool) -> None:
         if assn.array is not None:
-            values: list[str] = []
-            for w in assn.array:
-                values.extend(expand_word(self, w))
-            if assn.append:
-                existing = self.env.get_array(assn.name) or []
-                values = [*existing, *values]
-            self.env.set_array(assn.name, values, exported=exported)
+            self._apply_array_assignment(assn, exported=exported)
             return
         value = expand_word_no_split(self, assn.value) if assn.value is not None else ""
         if assn.subscript is not None:
-            # ``arr[key]=value`` form. Decide assoc vs indexed by looking at
-            # the existing variable; default to indexed when the subscript is
-            # numeric.
-            existing = self.env.get_var(assn.name)
-            from just_bash.parser.word_parser import parse_word
-
-            sub_word = parse_word(assn.subscript, line=assn.line)
-            sub_text = expand_word_no_split(self, sub_word)
-            if existing is not None and existing.assoc is not None:
-                if assn.append:
-                    prior = (existing.assoc or {}).get(sub_text, "")
-                    value = prior + value
-                self.env.set_assoc_element(assn.name, sub_text, value)
-                return
-            try:
-                idx = int(sub_text)
-            except ValueError:
-                # Treat as associative if the key isn't numeric.
-                if assn.append:
-                    prior = (existing.assoc or {}).get(sub_text, "") if existing else ""
-                    value = prior + value
-                self.env.set_assoc_element(assn.name, sub_text, value)
-                return
-            if (
-                assn.append
-                and existing is not None
-                and existing.array is not None
-                and 0 <= idx < len(existing.array)
-            ):
-                value = existing.array[idx] + value
-            self.env.set_array_element(assn.name, idx, value)
+            self._apply_subscript_assignment(assn, value)
             return
         try:
             self.env.set_var(assn.name, value, exported=exported, append=assn.append)
         except PermissionError as e:
             raise InterpreterError(str(e)) from e
+
+    def _apply_array_assignment(self, assn: Assignment, *, exported: bool) -> None:
+        values: list[str] = []
+        for w in assn.array or []:
+            values.extend(expand_word(self, w))
+        if assn.append:
+            existing = self.env.get_array(assn.name) or []
+            values = [*existing, *values]
+        self.env.set_array(assn.name, values, exported=exported)
+
+    def _apply_subscript_assignment(self, assn: Assignment, value: str) -> None:
+        """``arr[key]=value`` — assoc when the key is non-numeric or the
+        target is already declared assoc; indexed otherwise."""
+        from just_bash.parser.word_parser import parse_word
+
+        sub_word = parse_word(assn.subscript or "", line=assn.line)
+        sub_text = expand_word_no_split(self, sub_word)
+        existing = self.env.get_var(assn.name)
+        if existing is not None and existing.assoc is not None:
+            self._set_assoc_element_with_append(assn, sub_text, value, existing)
+            return
+        try:
+            idx = int(sub_text)
+        except ValueError:
+            # Treat as associative when the key isn't numeric.
+            self._set_assoc_element_with_append(assn, sub_text, value, existing)
+            return
+        if (
+            assn.append
+            and existing is not None
+            and existing.array is not None
+            and 0 <= idx < len(existing.array)
+        ):
+            value = existing.array[idx] + value
+        self.env.set_array_element(assn.name, idx, value)
+
+    def _set_assoc_element_with_append(
+        self,
+        assn: Assignment,
+        key: str,
+        value: str,
+        existing: object,
+    ) -> None:
+        if assn.append:
+            prior = ""
+            if existing is not None and getattr(existing, "assoc", None):
+                prior = existing.assoc.get(key, "")  # type: ignore[union-attr]
+            value = prior + value
+        self.env.set_assoc_element(assn.name, key, value)
 
     # ----------------------------------------------------------------- dispatch
     def _dispatch(self, argv: list[str], io_ctx: IO) -> int:

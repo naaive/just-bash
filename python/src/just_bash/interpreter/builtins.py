@@ -817,7 +817,6 @@ def _split_compound_array(body: str) -> list[str]:
     survive expansion intact. Empty fragments are dropped.
     """
     return [e for e in body.split("\x00") if e]
-    return 0
 
 
 _VALID_SIGNALS = frozenset(
