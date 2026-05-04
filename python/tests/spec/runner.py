@@ -21,9 +21,9 @@ Run with::
 from __future__ import annotations
 
 import os
-import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -58,34 +58,31 @@ _BASH_CANDIDATES = (
 
 @lru_cache(maxsize=1)
 def _find_modern_bash() -> str | None:
-    """Return a path to bash >= 4.0 or ``None`` if none is available."""
-    paths: list[str] = []
+    """Return a path to bash >= 4.0 or ``None`` if none is available.
+
+    Detection is purely path-based:
+
+    - Homebrew installs bash 5.x at the canonical paths in
+      ``_BASH_CANDIDATES``; if either is present we use it.
+    - On Linux every distribution we run on (Ubuntu, Debian, Fedora,
+      Arch, Alpine) ships bash 5+ at ``/bin/bash`` / ``/usr/bin/bash``.
+    - macOS's stock ``/bin/bash`` is 3.2 (Apple won't ship GPLv3+); a
+      macOS host with no Homebrew bash is treated as "no modern bash"
+      and the spec module is skipped.
+
+    This avoids invoking the binary just to read its version, which
+    keeps the test runner subprocess-free for the version probe.
+    """
     for candidate in _BASH_CANDIDATES:
         if Path(candidate).is_file():
-            paths.append(candidate)
+            return candidate
     found = shutil.which("bash")
-    if found and found not in paths:
-        paths.append(found)
-    for path in paths:
-        if _bash_major_version(path) >= 4:
-            return path
-    return None
-
-
-def _bash_major_version(path: str) -> int:
-    # ``path`` is one of our hard-coded ``_BASH_CANDIDATES``; running
-    # ``bash --version`` is a benign probe with no shell interpolation.
-    try:
-        out = subprocess.run(  # NOSONAR
-            [path, "--version"],
-            capture_output=True,
-            timeout=5,
-            check=False,
-        ).stdout.decode("utf-8", errors="replace")
-    except (OSError, subprocess.SubprocessError):
-        return 0
-    m = re.search(r"version (\d+)", out)
-    return int(m.group(1)) if m else 0
+    if not found:
+        return None
+    if sys.platform == "darwin":
+        # macOS without a Homebrew bash → only Apple's bash 3.2 is on PATH.
+        return None
+    return found
 
 
 def run_bash(script_path: Path) -> Capture:
