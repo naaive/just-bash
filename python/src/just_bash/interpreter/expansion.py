@@ -67,12 +67,11 @@ def expand_word(interp: Interpreter, word: Word) -> list[str]:
         pieces = _expand_to_pieces(interp, w)
         # Step 6: word-split unquoted pieces on $IFS.
         split = _word_split(pieces, interp.env.get("IFS"))
-        # Step 7: glob each split, unless any part of that field was quoted.
-        for raw, had_quoted in split:
-            if had_quoted:
-                out.append(raw)
-                continue
-            globbed = _glob(interp, raw)
+        # Step 7: glob each split using the field's pattern (which has
+        # quoted chars pre-escaped). Falls back to the raw text when the
+        # glob has no matches (or when the pattern has no glob meta).
+        for raw, pattern, _had_quoted in split:
+            globbed = _glob(interp, pattern)
             out.extend(globbed if globbed else [raw])
     return out
 
@@ -566,33 +565,38 @@ def _expand_command_sub(interp: Interpreter, part: CommandSubstitution) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _word_split(pieces: list[_Piece], ifs: str | None) -> list[tuple[str, bool]]:
+def _word_split(pieces: list[_Piece], ifs: str | None) -> list[tuple[str, str, bool]]:
     """Split an unquoted ``$IFS`` run into separate fields.
 
-    Returns a list of ``(field_text, had_quoted_part)`` pairs. Quoted pieces
-    contribute their full text and never start a new field on their own
-    boundaries, but a piece marked ``end_field`` always closes the current
-    field (used for ``"${arr[@]}"`` boundaries).
+    Returns a list of ``(field_text, glob_pattern, had_quoted_part)``
+    triples. ``glob_pattern`` mirrors ``field_text`` but with glob meta
+    chars from quoted pieces escaped, so a later ``glob()`` step honours
+    ``"$dir"/*`` (the ``*`` should still expand) without expanding glob
+    meta that came from inside a quoted string.
     """
     if ifs is None:
         ifs = " \t\n"
     if not pieces:
-        return [("", False)]
-    fields: list[tuple[str, bool]] = []
+        return [("", "", False)]
+    fields: list[tuple[str, str, bool]] = []
     current = ""
+    pattern = ""
     had_quoted = False
     for piece in pieces:
         text, quoted = piece.text, piece.quoted
         if quoted and not piece.end_field:
             current += text
+            pattern += _escape_glob(text)
             had_quoted = True
             continue
         if piece.end_field:
             # Array-element boundary: emit (text + current) and break field.
             current += text
+            pattern += _escape_glob(text) if quoted else text
             had_quoted = had_quoted or quoted
-            fields.append((current, had_quoted))
+            fields.append((current, pattern, had_quoted))
             current = ""
+            pattern = ""
             had_quoted = False
             continue
         # Walk text char-by-char looking for IFS chars.
@@ -602,8 +606,9 @@ def _word_split(pieces: list[_Piece], ifs: str | None) -> list[tuple[str, bool]]
             if ch in ifs:
                 # End current field if non-empty.
                 if current or had_quoted:
-                    fields.append((current, had_quoted))
+                    fields.append((current, pattern, had_quoted))
                     current = ""
+                    pattern = ""
                     had_quoted = False
                 # Skip whitespace IFS run.
                 if ch in " \t\n":
@@ -613,14 +618,15 @@ def _word_split(pieces: list[_Piece], ifs: str | None) -> list[tuple[str, bool]]
                 i += 1
                 continue
             current += ch
+            pattern += ch
             i += 1
     if current or had_quoted:
-        fields.append((current, had_quoted))
+        fields.append((current, pattern, had_quoted))
     if not fields:
         # Bash semantics: unquoted empty expansions produce ZERO fields,
         # but a literal ``""`` (or any quoted piece) keeps one empty field.
         if any(p.quoted for p in pieces):
-            return [("", True)]
+            return [("", "", True)]
         return []
     return fields
 
