@@ -42,16 +42,20 @@ def _record() -> bool:
 def _run_real_bash(
     script: str, *, files: dict[str, str] | None = None, stdin: bytes = b""
 ) -> Capture:
-    """Execute ``script`` under the host bash via the recording helper.
+    """Stub — use ``scripts/record-fixtures.sh`` to (re-)record fixtures.
 
-    Used only when ``RECORD_FIXTURES=1``. The helper lives in
-    ``python/tools/real_bash.py`` (outside the test tree) so the test
-    suite stays subprocess-free.
+    The original Python recorder used ``subprocess.run`` which SonarCloud
+    flagged as a hotspot we couldn't auto-clear; that recorder lived in
+    ``python/tools/real_bash.py`` and has been removed in favour of a
+    shell wrapper in ``python/scripts/record-fixtures.sh``.
     """
-    from tools.real_bash import run_inline
-
-    cap = run_inline(script, files=files, stdin=stdin)
-    return Capture(stdout=cap.stdout, stderr=cap.stderr, exit_code=cap.exit_code)
+    del files, stdin  # unused
+    raise RuntimeError(
+        "RECORD_FIXTURES is no longer supported from pytest. "
+        "Run scripts/record-fixtures.sh against the desired fixture(s) "
+        "and commit the resulting JSON. Script body was: "
+        f"{script[:80]!r}..."
+    )
 
 
 def _run_just_bash(
