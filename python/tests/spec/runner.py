@@ -23,6 +23,7 @@ import sys
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from typing import Protocol
 
 from just_bash.fs.vfs import VirtualFs
 from just_bash.interpreter.environment import Environment
@@ -94,12 +95,18 @@ def run_just_bash(script_path: Path) -> Capture:
     return Capture(stdout=result.stdout, stderr=result.stderr, exit_code=result.exit_code)
 
 
-def assert_equivalent(name: str, ours: object, theirs: object) -> None:
+class _CaptureLike(Protocol):
+    stdout: str
+    stderr: str
+    exit_code: int
+
+
+def assert_equivalent(name: str, ours: _CaptureLike, theirs: _CaptureLike) -> None:
     """Compare two capture objects field-by-field (cross-type tolerant)."""
     if (
-        getattr(ours, "stdout", None) == getattr(theirs, "stdout", None)
-        and getattr(ours, "stderr", None) == getattr(theirs, "stderr", None)
-        and getattr(ours, "exit_code", None) == getattr(theirs, "exit_code", None)
+        ours.stdout == theirs.stdout
+        and ours.stderr == theirs.stderr
+        and ours.exit_code == theirs.exit_code
     ):
         return
     raise AssertionError(
