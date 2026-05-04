@@ -1,8 +1,9 @@
-"""Script-driven spec-test runner.
+"""Helper module for the spec-test harness.
 
-Each ``*.test.sh`` file in ``tests/spec/scripts/`` is executed both with
-real ``bash`` and with ``just-bash-py`` (against a fresh ``VirtualFs``).
-The runner asserts both produce identical stdout / stderr / exit-code.
+Discovers the ``*.test.sh`` files under ``tests/spec/scripts/`` and the
+best available ``bash`` binary on the host. The actual subprocess
+invocation lives next door in ``test_spec.py`` so the production code
+in this package stays free of subprocess machinery.
 
 Why a separate harness from ``tests/comparison/``: comparison tests are
 pinned snapshots committed alongside the test (host-independent). Spec
@@ -12,17 +13,12 @@ Many scripts here use bash 4+ features (``declare -A``, ``mapfile``,
 ``${var@Q}``, ``${var,,}`` etc.). macOS still ships bash 3.2 as
 ``/bin/bash``; on those hosts we prefer a Homebrew-installed bash 5.x
 when present, otherwise the whole module is skipped.
-
-Run with::
-
-    pytest tests/spec
 """
 
 from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 import sys
 from dataclasses import dataclass
 from functools import lru_cache
@@ -57,7 +53,7 @@ _BASH_CANDIDATES = (
 
 
 @lru_cache(maxsize=1)
-def _find_modern_bash() -> str | None:
+def find_modern_bash() -> str | None:
     """Return a path to bash >= 4.0 or ``None`` if none is available.
 
     Detection is purely path-based:
@@ -71,7 +67,7 @@ def _find_modern_bash() -> str | None:
       and the spec module is skipped.
 
     This avoids invoking the binary just to read its version, which
-    keeps the test runner subprocess-free for the version probe.
+    keeps the helper subprocess-free.
     """
     for candidate in _BASH_CANDIDATES:
         if Path(candidate).is_file():
@@ -83,31 +79,6 @@ def _find_modern_bash() -> str | None:
         # macOS without a Homebrew bash → only Apple's bash 3.2 is on PATH.
         return None
     return found
-
-
-def run_bash(script_path: Path) -> Capture:
-    bash = _find_modern_bash()
-    if bash is None:
-        raise RuntimeError("bash >= 4 not found")
-    import tempfile
-
-    # ``script_path`` comes from the committed ``tests/spec/scripts`` glob
-    # and ``bash`` is one of our vetted ``_BASH_CANDIDATES``; no shell
-    # metacharacter concern because we don't pass ``shell=True``.
-    with tempfile.TemporaryDirectory() as tmp:
-        result = subprocess.run(  # NOSONAR
-            [bash, str(script_path)],
-            cwd=tmp,
-            capture_output=True,
-            timeout=10,
-            env={"LC_ALL": "C", "LANG": "C", "PATH": "/usr/bin:/bin", "HOME": tmp, "PWD": tmp},
-            check=False,
-        )
-    return Capture(
-        stdout=result.stdout.decode("utf-8", errors="replace"),
-        stderr=result.stderr.decode("utf-8", errors="replace"),
-        exit_code=result.returncode,
-    )
 
 
 def run_just_bash(script_path: Path) -> Capture:
@@ -139,4 +110,4 @@ def is_skipped() -> bool:
     if os.environ.get("SKIP_SPEC", "") not in ("", "0", "false"):
         return True
     # No bash 4+ on this host — the live-comparison harness can't run.
-    return _find_modern_bash() is None
+    return find_modern_bash() is None
