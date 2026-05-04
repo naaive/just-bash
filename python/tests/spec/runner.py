@@ -94,8 +94,13 @@ def run_just_bash(script_path: Path) -> Capture:
     return Capture(stdout=result.stdout, stderr=result.stderr, exit_code=result.exit_code)
 
 
-def assert_equivalent(name: str, ours: Capture, theirs: Capture) -> None:
-    if ours == theirs:
+def assert_equivalent(name: str, ours: object, theirs: object) -> None:
+    """Compare two capture objects field-by-field (cross-type tolerant)."""
+    if (
+        getattr(ours, "stdout", None) == getattr(theirs, "stdout", None)
+        and getattr(ours, "stderr", None) == getattr(theirs, "stderr", None)
+        and getattr(ours, "exit_code", None) == getattr(theirs, "exit_code", None)
+    ):
         return
     raise AssertionError(
         f"spec mismatch for {name}\n"

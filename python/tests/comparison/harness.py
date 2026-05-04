@@ -14,8 +14,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -44,38 +42,16 @@ def _record() -> bool:
 def _run_real_bash(
     script: str, *, files: dict[str, str] | None = None, stdin: bytes = b""
 ) -> Capture:
-    """Execute the script under real bash inside a temporary directory."""
-    import tempfile
+    """Execute ``script`` under the host bash via the recording helper.
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        if files:
-            for relpath, content in files.items():
-                target = Path(tmpdir) / relpath
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(content)
-        bash = shutil.which("bash")
-        if bash is None:
-            raise RuntimeError("real bash not on PATH")
-        result = subprocess.run(
-            [bash, "-c", script],
-            cwd=tmpdir,
-            input=stdin,
-            capture_output=True,
-            timeout=10,
-            env={
-                "LC_ALL": "C",
-                "LANG": "C",
-                "PATH": "/usr/bin:/bin",
-                "HOME": tmpdir,
-                "PWD": tmpdir,
-            },
-            check=False,
-        )
-    return Capture(
-        stdout=result.stdout.decode("utf-8", errors="replace"),
-        stderr=result.stderr.decode("utf-8", errors="replace"),
-        exit_code=result.returncode,
-    )
+    Used only when ``RECORD_FIXTURES=1``. The helper lives in
+    ``python/tools/real_bash.py`` (outside the test tree) so the test
+    suite stays subprocess-free.
+    """
+    from tools.real_bash import run_inline
+
+    cap = run_inline(script, files=files, stdin=stdin)
+    return Capture(stdout=cap.stdout, stderr=cap.stderr, exit_code=cap.exit_code)
 
 
 def _run_just_bash(
