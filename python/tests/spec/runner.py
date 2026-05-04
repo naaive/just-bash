@@ -73,10 +73,10 @@ def _find_modern_bash() -> str | None:
 
 
 def _bash_major_version(path: str) -> int:
+    # ``path`` is one of our hard-coded ``_BASH_CANDIDATES``; running
+    # ``bash --version`` is a benign probe with no shell interpolation.
     try:
-        # NOSONAR: ``path`` is one of our hard-coded ``_BASH_CANDIDATES``,
-        # never user input; running ``bash --version`` is a benign probe.
-        out = subprocess.run(
+        out = subprocess.run(  # NOSONAR
             [path, "--version"],
             capture_output=True,
             timeout=5,
@@ -94,12 +94,11 @@ def run_bash(script_path: Path) -> Capture:
         raise RuntimeError("bash >= 4 not found")
     import tempfile
 
+    # ``script_path`` comes from the committed ``tests/spec/scripts`` glob
+    # and ``bash`` is one of our vetted ``_BASH_CANDIDATES``; no shell
+    # metacharacter concern because we don't pass ``shell=True``.
     with tempfile.TemporaryDirectory() as tmp:
-        # NOSONAR: this is a test harness; ``script_path`` comes from the
-        # committed ``tests/spec/scripts`` glob and ``bash`` is one of our
-        # vetted ``_BASH_CANDIDATES``. No shell metacharacter concern
-        # because we don't pass ``shell=True``.
-        result = subprocess.run(
+        result = subprocess.run(  # NOSONAR
             [bash, str(script_path)],
             cwd=tmp,
             capture_output=True,
