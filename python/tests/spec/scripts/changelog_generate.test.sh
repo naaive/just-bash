@@ -41,6 +41,7 @@ for section in feat fix docs test chore; do
       docs)  echo "## Documentation" ;;
       test)  echo "## Tests" ;;
       chore) echo "## Chores" ;;
+      *)     echo "## Other" ;;
     esac
     printf '%s\n' "$body"
   fi

@@ -23,6 +23,7 @@ deploy_target() {
     chore/*)           echo "ci-only" ;;
     *)                 echo "no-deploy" ;;
   esac
+  return 0
 }
 
 semver_only() {
@@ -32,6 +33,7 @@ semver_only() {
   else
     echo "(no semver)"
   fi
+  return 0
 }
 
 declare -A by_target=(

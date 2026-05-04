@@ -28,6 +28,7 @@ explain_when() {
   else
     echo "custom"
   fi
+  return 0
 }
 
 while IFS= read -r line; do

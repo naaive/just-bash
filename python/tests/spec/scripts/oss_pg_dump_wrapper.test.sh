@@ -13,6 +13,7 @@ target_for() {
   # Use a fixed timestamp so the test is deterministic.
   out=$OUT_DIR/$DB_NAME-20240101.sql.$suffix
   printf '%s' "$out"
+  return 0
 }
 
 dump() {

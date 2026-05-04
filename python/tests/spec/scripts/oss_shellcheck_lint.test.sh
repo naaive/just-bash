@@ -17,6 +17,7 @@ EOF
 flag() {
   local rule=$1 line=$2 msg=$3
   printf '%-7s line %d: %s\n' "$rule" "$line" "$msg"
+  return 0
 }
 
 # Pre-build the literal patterns once so the case clauses stay simple.

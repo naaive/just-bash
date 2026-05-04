@@ -74,6 +74,8 @@ def _find_modern_bash() -> str | None:
 
 def _bash_major_version(path: str) -> int:
     try:
+        # NOSONAR: ``path`` is one of our hard-coded ``_BASH_CANDIDATES``,
+        # never user input; running ``bash --version`` is a benign probe.
         out = subprocess.run(
             [path, "--version"],
             capture_output=True,
@@ -93,6 +95,10 @@ def run_bash(script_path: Path) -> Capture:
     import tempfile
 
     with tempfile.TemporaryDirectory() as tmp:
+        # NOSONAR: this is a test harness; ``script_path`` comes from the
+        # committed ``tests/spec/scripts`` glob and ``bash`` is one of our
+        # vetted ``_BASH_CANDIDATES``. No shell metacharacter concern
+        # because we don't pass ``shell=True``.
         result = subprocess.run(
             [bash, str(script_path)],
             cwd=tmp,

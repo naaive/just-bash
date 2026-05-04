@@ -25,6 +25,7 @@ build_plan() {
     fi
     printf 'SKIP   %-11s == %s\n' "$name" "$dst"
   done
+  return 0
 }
 
 build_plan /tmp/rs/src /tmp/rs/dst

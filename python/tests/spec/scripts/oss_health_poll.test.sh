@@ -16,6 +16,7 @@ poll_health() {
   else
     HEALTH=${states[$idx]}
   fi
+  return 0
 }
 
 deadline=10
@@ -25,6 +26,7 @@ while (( attempt < deadline )); do
   case "$HEALTH" in
     healthy) echo "service is healthy after $attempt attempts"; exit 0 ;;
     unhealthy) echo "service is failing"; exit 1 ;;
+    *) ;;  # keep polling
   esac
 done
 

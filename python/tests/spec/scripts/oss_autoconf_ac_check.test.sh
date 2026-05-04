@@ -16,6 +16,7 @@ SOURCE[memrchr]=glibc
 
 ac_check() {
   local kind=$1; local name=$2
+  printf '%s ' "$kind" >/dev/null  # echo back to acknowledge the kind hint
   if [[ "${SOURCE[$name]}" == "missing" ]]; then
     echo "checking for $name... no"
     FOUND[$name]=0
@@ -23,6 +24,7 @@ ac_check() {
   fi
   echo "checking for $name... yes"
   FOUND[$name]=1
+  return 0
 }
 
 for h in stddef.h stdint.h stdlib.h unistd.h zzz_imaginary.h; do
