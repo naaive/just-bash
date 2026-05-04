@@ -154,13 +154,17 @@ class Interpreter:
         self.env.last_exit = saved_exit
 
     def run_substitution(self, script: Script) -> str:
-        """Run a script for ``$(...)`` and capture its stdout."""
+        """Run a script for ``$(...)`` and capture its stdout.
+
+        The subshell's exit status is propagated to the parent's ``$?`` so
+        ``out=$(cmd); rc=$?`` works.
+        """
         io_ctx = IO()
         try:
             for stmt in script.statements:
                 self._run_statement(stmt, io_ctx)
-        except ExitException:
-            pass
+        except ExitException as e:
+            self.env.last_exit = e.code
         return io_ctx.stdout.getvalue().decode("utf-8", errors="replace")
 
     def _make_stream(self) -> io.BytesIO:
@@ -186,7 +190,7 @@ class Interpreter:
             # element of the chain matters (matches bash semantics).
             next_op = stmt.operators[i] if i < len(stmt.operators) else None
             in_chain = next_op in ("&&", "||")
-            if last != 0 and not in_chain:
+            if last != 0 and not in_chain and not stmt.set_e_safe:
                 if "ERR" in self.env.traps:
                     self._fire_trap("ERR", io_ctx)
                 if "e" in self.env.shell_options:
@@ -276,12 +280,30 @@ class Interpreter:
     # ----------------------------------------------------- compound impls
     def _run_if(self, node: If, io_ctx: IO) -> int:
         for clause in node.clauses:
-            self._exec_block(clause.condition, io_ctx)
+            with self._suspend_errexit():
+                self._exec_block(clause.condition, io_ctx)
             if self.env.last_exit == 0:
                 return self._exec_block(clause.body, io_ctx)
         if node.else_body is not None:
             return self._exec_block(node.else_body, io_ctx)
         return 0
+
+    @contextlib.contextmanager
+    def _suspend_errexit(self):  # type: ignore[no-untyped-def]
+        """Temporarily disable ``set -e`` for control-flow conditions.
+
+        Bash exempts the condition of ``if`` / ``while`` / ``until`` from
+        errexit: a non-zero exit there is the test result, not a script
+        failure. Yields nothing.
+        """
+        had = "e" in self.env.shell_options
+        if had:
+            self.env.shell_options.discard("e")
+        try:
+            yield
+        finally:
+            if had:
+                self.env.shell_options.add("e")
 
     def _run_for(self, node: For, io_ctx: IO) -> int:
         if node.words is None:
@@ -307,8 +329,11 @@ class Interpreter:
 
     def _run_while(self, node: While | Until, io_ctx: IO, *, until: bool) -> int:
         last = 0
+        # ``while``/``until`` conditions are exempt from set -e (they're
+        # tested expressions, not failure points).
         while True:
-            self._exec_block(node.condition, io_ctx)
+            with self._suspend_errexit():
+                self._exec_block(node.condition, io_ctx)
             cond = self.env.last_exit == 0
             if cond if until else not cond:
                 break
@@ -395,9 +420,32 @@ class Interpreter:
     def _run_simple(self, cmd: SimpleCommand, io_ctx: IO) -> int:
         with self._apply_redirections(cmd.redirections, io_ctx) as new_io:
             if cmd.name is None:
-                # Pure assignments: set variables and return 0.
-                for assn in cmd.assignments:
-                    self._apply_assignment(assn, exported=False)
+                # Pure assignments: set variables and inherit $? from any
+                # command substitution on the right-hand side. The RHS is
+                # expanded with the prior $? still visible (so ``rc=$?``
+                # captures the previous command's status); a command
+                # substitution then updates $? to its own exit code.
+                prior_exit = self.env.last_exit
+                substitution_fired = [False]
+
+                # Track whether any command substitution ran during the
+                # assignment so we can choose between the substitution's
+                # status and the conventional 0.
+                orig_run_sub = self.run_substitution
+
+                def tracked(script):  # type: ignore[no-untyped-def]
+                    substitution_fired[0] = True
+                    return orig_run_sub(script)
+
+                self.run_substitution = tracked  # type: ignore[assignment]
+                try:
+                    for assn in cmd.assignments:
+                        self._apply_assignment(assn, exported=False)
+                finally:
+                    self.run_substitution = orig_run_sub  # type: ignore[assignment]
+                if substitution_fired[0]:
+                    return self.env.last_exit
+                self.env.last_exit = prior_exit
                 return 0
             argv = self._build_argv(cmd)
             if not argv:

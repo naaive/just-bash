@@ -614,15 +614,33 @@ class Parser:
             Statement as _St,
         )
 
-        def _arith_stmt(text: str, default: str = "1") -> _St:
+        def _arith_stmt(text: str, *, default: str = "1", set_e_safe: bool = False) -> _St:
             text = text.strip() or default
             expr = parse_arith_text(text)
             cmd = _AC(expression=expr, line=line)
-            return _St(pipelines=[_Pi(commands=[cmd], line=line)], line=line)
+            return _St(
+                pipelines=[_Pi(commands=[cmd], line=line)],
+                line=line,
+                set_e_safe=set_e_safe,
+            )
 
-        init_stmt = _arith_stmt(init_text, default="0")
-        cond_stmt = _arith_stmt(cond_text, default="1")
-        step_stmt = _arith_stmt(step_text, default="0")
+        # init/cond/step run for their side effects or as loop machinery;
+        # bash exempts them from ``set -e`` (only the body's statements
+        # count toward errexit).
+        init_stmt = _arith_stmt(init_text, default="0", set_e_safe=True)
+        cond_stmt = _arith_stmt(cond_text, default="1", set_e_safe=True)
+        step_stmt = _arith_stmt(step_text, default="0", set_e_safe=True)
+        # A trailing ``:`` no-op keeps the loop body's last exit code at 0
+        # so the for-loop as a whole reports success even if the step's
+        # arithmetic value is zero (which would otherwise be rc=1).
+        from just_bash.ast.nodes import SimpleCommand as _SC
+
+        noop_cmd = _SC(name=parse_word(":", line=line), line=line)
+        noop_stmt = _St(
+            pipelines=[_Pi(commands=[noop_cmd], line=line)],
+            line=line,
+            set_e_safe=True,
+        )
         # Skip optional ``;`` and newlines, expect ``do``.
         self._skip_newlines()
         if self._peek().kind is TokenKind.OPERATOR and self._peek().text == ";":
@@ -639,7 +657,7 @@ class Parser:
 
         wh = _Wh(
             condition=[cond_stmt],
-            body=[*body, step_stmt],
+            body=[*body, step_stmt, noop_stmt],
             line=line,
         )
         wh_stmt = _St(pipelines=[_Pi(commands=[wh], line=line)], line=line)

@@ -525,6 +525,11 @@ class Statement(Node):
     pipelines: list[Pipeline] = field(default_factory=list)
     operators: list[LiteralT["&&", "||", ";"]] = field(default_factory=list)
     background: bool = False
+    # True when this is a synthesized statement that should be exempt from
+    # ``set -e`` (e.g. the init / step of a C-style ``for ((;;))`` whose
+    # arithmetic result is part of the loop machinery, not the script's
+    # success/failure path).
+    set_e_safe: bool = False
 
 
 @dataclass(slots=True)

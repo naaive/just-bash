@@ -174,6 +174,41 @@ def _eval_binary(interp: Interpreter, op: str, left: Word, right: Word) -> bool:
             "-gt": ln > rn,
             "-ge": ln >= rn,
         }[op]
+    if op in ("-nt", "-ot", "-ef"):
+        # File-comparison ops: ``-nt`` (lhs newer than rhs), ``-ot``
+        # (older), ``-ef`` (same inode). Missing files compare as
+        # non-existent (oldest).
+        from just_bash.fs.vfs import FsError
+
+        def _mtime(path: str) -> float | None:
+            try:
+                node = interp.fs.stat(path)
+            except FsError:
+                return None
+            return getattr(node, "mtime", 0.0)
+
+        lt = _mtime(lv)
+        rt = _mtime(rv)
+        if op == "-nt":
+            if lt is None:
+                return False
+            if rt is None:
+                return True
+            return lt > rt
+        if op == "-ot":
+            if rt is None:
+                return False
+            if lt is None:
+                return True
+            return lt < rt
+        # -ef: in our VFS each path uniquely identifies a node (no
+        # hardlinks), so equal-canonical-paths is a fair proxy.
+        try:
+            l_canon = interp.fs._resolve(lv)  # type: ignore[attr-defined]
+            r_canon = interp.fs._resolve(rv)  # type: ignore[attr-defined]
+        except Exception:
+            return False
+        return l_canon == r_canon
     raise InterpreterError(f"unsupported binary test operator: {op}")
 
 
